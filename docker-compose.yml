@@ -1,0 +1,61 @@
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sivapre_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Monta el código fuente para que hot-reload funcione
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sivapre-network
+    restart: unless-stopped
+
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: sivapre_db
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sivapre}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sivapre_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-sivapre_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sivapre} -d ${POSTGRES_DB:-sivapre_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sivapre-network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: sivapre_pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@sivapre.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    depends_on:
+      - db
+    networks:
+      - sivapre-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  sivapre-network:
+    driver: bridge
