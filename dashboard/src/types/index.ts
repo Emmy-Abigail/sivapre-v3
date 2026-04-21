@@ -35,6 +35,7 @@ export type TendenciaKpi = 'alerta' | 'estable' | 'mejora'
 export interface FiltrosDashboard {
   departamento: string
   provincia: string
+  distrito: string
   rango: '7d' | '30d' | '90d'
 }
 

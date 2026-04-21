@@ -126,3 +126,59 @@ html, body {
   border-color: rgba(34, 211, 238, 0.3);
   box-shadow: 0 0 12px rgba(34, 211, 238, 0.1);
 }
+
+/* ── Mapbox popup dark theme ───────────────────────────────── */
+.sivapre-popup .mapboxgl-popup-content {
+  background: rgba(7, 18, 36, 0.97) !important;
+  border: 1px solid rgba(34, 211, 238, 0.2) !important;
+  border-radius: 8px !important;
+  padding: 12px 14px !important;
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.08), 0 4px 20px rgba(0, 0, 0, 0.7) !important;
+}
+
+.sivapre-popup .mapboxgl-popup-close-button {
+  color: #475569 !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  top: 4px !important;
+  right: 6px !important;
+  background: none !important;
+}
+
+.sivapre-popup .mapboxgl-popup-close-button:hover {
+  color: #94a3b8 !important;
+  background: none !important;
+}
+
+.sivapre-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+  border-top-color: rgba(7, 18, 36, 0.97) !important;
+}
+
+.sivapre-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+  border-bottom-color: rgba(7, 18, 36, 0.97) !important;
+}
+
+/* Clases para HTML de popups (inyectado via setHTML) */
+.mp-popup {
+  font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+  font-size: 11px;
+  line-height: 1.65;
+  min-width: 155px;
+  color: #cbd5e1;
+}
+
+.mp-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin: 0 0 7px;
+  letter-spacing: 0.04em;
+}
+
+.mp-popup p {
+  margin: 2px 0;
+}
+
+.mp-k {
+  color: #475569;
+  margin-right: 5px;
+}
