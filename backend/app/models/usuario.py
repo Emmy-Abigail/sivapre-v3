@@ -15,11 +15,13 @@ class Usuario(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     nombre: Mapped[str] = mapped_column(String(150))
+    apellido: Mapped[str | None] = mapped_column(String(100), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
     distrito: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    rol: Mapped[str] = mapped_column(String(50), default='ciudadano', server_default='ciudadano')
     hashed_password: Mapped[str] = mapped_column(String(255))
-    es_activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    es_activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

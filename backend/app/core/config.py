@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str
     CLOUDINARY_API_SECRET: str
 
+    # CORS — en producción definir una lista separada por comas, p.ej.:
+    # ALLOWED_ORIGINS=https://app.sivapre.gob,https://admin.sivapre.gob
+    ALLOWED_ORIGINS: list[str] = ["*"]
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

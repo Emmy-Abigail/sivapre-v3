@@ -7,23 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
+    create_refresh_token,
+    get_current_user,
     hash_password,
     verify_password,
 )
 from app.models.usuario import Usuario
-from app.schemas.auth import LoginRequest, Token
-from app.schemas.usuario import UsuarioCreate, UsuarioResponse
+from app.schemas.auth import LoginRequest
+from app.schemas.usuario import AuthResponse, UsuarioCreate, UsuarioResponse
 
 router = APIRouter(tags=["Auth"])
 
 
 @router.post(
     "/register",
-    response_model=UsuarioResponse,
+    response_model=AuthResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def register(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
-    # Verificar email único
     result = await db.execute(select(Usuario).where(Usuario.email == data.email))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -33,18 +34,24 @@ async def register(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
 
     user = Usuario(
         nombre=data.nombre,
+        apellido=data.apellido,
         email=data.email,
         telefono=data.telefono,
         distrito=data.distrito,
         hashed_password=hash_password(data.password),
     )
     db.add(user)
-    await db.flush()   # obtiene el id generado sin cerrar la sesión
+    await db.flush()
     await db.refresh(user)
-    return user
+
+    return AuthResponse(
+        token=create_access_token({"sub": user.email}),
+        refreshToken=create_refresh_token({"sub": user.email}),
+        usuario=UsuarioResponse.model_validate(user),
+    )
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=AuthResponse)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Usuario).where(Usuario.email == data.email))
     user = result.scalar_one_or_none()
@@ -61,8 +68,19 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Usuario inactivo",
         )
 
-    # Actualizar último acceso
     user.ultimo_acceso = datetime.now(timezone.utc)
 
-    token = create_access_token(data={"sub": user.email})
-    return Token(access_token=token)
+    return AuthResponse(
+        token=create_access_token({"sub": user.email}),
+        refreshToken=create_refresh_token({"sub": user.email}),
+        usuario=UsuarioResponse.model_validate(user),
+    )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="Cierra la sesión del usuario autenticado",
+)
+async def logout(_: Usuario = Depends(get_current_user)):
+    return {"mensaje": "Sesión cerrada correctamente."}

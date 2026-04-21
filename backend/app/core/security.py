@@ -39,6 +39,10 @@ def create_access_token(
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_refresh_token(data: dict) -> str:
+    return create_access_token(data, expires_delta=timedelta(days=30))
+
+
 # ─── Dependency: usuario autenticado ─────────────────────────────────────────
 
 async def get_current_user(

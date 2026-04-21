@@ -8,31 +8,29 @@ from app.models.caso_netlab import CasoNetlab
 from app.models.caso_noti import CasoNoti
 from app.models.reporte import Reporte
 from app.models.usuario import Usuario
+from app.schemas.enums import ObservaLarvasEnum
 
 router = APIRouter(tags=["Dashboard"])
 
 
-@router.get("/kpis")
+@router.get("/kpis", summary="KPIs globales del sistema de vigilancia")
 async def get_kpis(
     db: AsyncSession = Depends(get_db),
     _: Usuario = Depends(get_current_user),
 ):
-    # Total de reportes ciudadanos
-    total_reportes = await db.scalar(select(func.count()).select_from(Reporte))
-
-    # Reportes donde se observaron larvas
-    reportes_con_larvas = await db.scalar(
-        select(func.count()).select_from(Reporte).where(Reporte.observa_larvas == "si")
-    )
-
-    # Casos sospechosos (total en notificaciones epidemiológicas)
-    casos_sospechosos = await db.scalar(select(func.count()).select_from(CasoNoti))
-
-    # Casos confirmados por diagnóstico molecular positivo en Netlab
-    casos_confirmados = await db.scalar(
-        select(func.count())
-        .select_from(CasoNetlab)
-        .where(CasoNetlab.dx_molecular_dengue == "Positivo")
+    total_reportes, reportes_con_larvas, casos_sospechosos, casos_confirmados = (
+        await db.scalar(select(func.count()).select_from(Reporte)),
+        await db.scalar(
+            select(func.count())
+            .select_from(Reporte)
+            .where(Reporte.observa_larvas == ObservaLarvasEnum.SI_CLARAMENTE.value)
+        ),
+        await db.scalar(select(func.count()).select_from(CasoNoti)),
+        await db.scalar(
+            select(func.count())
+            .select_from(CasoNetlab)
+            .where(CasoNetlab.dx_molecular_dengue == "Positivo")
+        ),
     )
 
     return {
