@@ -79,14 +79,15 @@ export function PatientListPanel() {
       </div>
 
       {/* Lista */}
-      <ul className="flex-1 overflow-y-auto divide-y" style={{ divideColor: 'rgba(255,255,255,0.04)' }}>
+      <ul className="flex-1 overflow-y-auto" style={{ borderTop: '1px solid transparent' }}>
         {CASOS_MOCK.map((caso) => (
           <li
             key={caso.id}
             className={cn(
-              'px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors',
+              'px-4 py-3 flex items-center gap-3 hover:bg-white/[0.02] transition-colors border-b',
               caso.estado === 'Resuelto' && 'opacity-50'
             )}
+            style={{ borderColor: 'rgba(255,255,255,0.04)' }}
           >
             {/* Indicador de estado */}
             <div
@@ -138,12 +139,7 @@ export function PatientListPanel() {
         className="px-4 py-2.5 shrink-0 text-center"
         style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}
       >
-        <button
-          className="text-xs transition-colors"
-          style={{ color: 'rgba(34, 211, 238, 0.6)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#22d3ee')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(34, 211, 238, 0.6)')}
-        >
+        <button className="text-xs text-cyan-400/60 hover:text-cyan-400 transition-colors">
           Ver todos los casos →
         </button>
       </div>
