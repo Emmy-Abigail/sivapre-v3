@@ -1,2 +1,2 @@
 Aqui ingresare todos mis archivos
-trabajo local comenzando probando en arch q **funcione**
+Efectivamente funciono como esperaba el sistema de control
