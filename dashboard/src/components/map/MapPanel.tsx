@@ -5,14 +5,13 @@ import 'leaflet/dist/leaflet.css'
 import { Layers } from 'lucide-react'
 import { IQUITOS_ZOOM, CAPAS_MAPA } from '@/config/regiones'
 import type { CapaMapa } from '@/config/regiones'
-import { REPORTES_MOCK } from '@/lib/mocks/reportes'
-import { CASOS_NOTI_MOCK } from '@/lib/mocks/casosNoti'
-import { CASOS_NETLAB_MOCK } from '@/lib/mocks/casosNetlab'
+import { useReportes } from '@/lib/hooks/useReportes'
+import { useCasosNoti } from '@/lib/hooks/useCasosNoti'
+import { useCasosNetlab } from '@/lib/hooks/useCasosNetlab'
 import { cn } from '@/lib/utils'
 import type { FiltrosDashboard } from '@/types'
 import type { PathOptions } from 'leaflet'
 
-// Iquitos center [lat, lng] — Leaflet uses lat-first convention
 const CENTER: [number, number] = [-3.7437, -73.2516]
 
 const DISTRICT_CENTERS: Record<string, [number, number]> = {
@@ -41,7 +40,6 @@ function hexRgb(hex: string): string {
   return `${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)}`
 }
 
-// ── Estilos condicionales por capa ───────────────────────────
 function criaderoStyle(observaLarvas: string): { radius: number; pathOptions: PathOptions } {
   const critical = observaLarvas === 'si'
   return {
@@ -60,13 +58,7 @@ function notiStyle(tipo: string): { radius: number; pathOptions: PathOptions } {
   const color = tipo === 'C' ? '#f87171' : tipo === 'P' ? '#fbbf24' : '#60a5fa'
   return {
     radius: 7,
-    pathOptions: {
-      fillColor: color,
-      color: '#ffffff',
-      fillOpacity: 0.8,
-      weight: 1.5,
-      opacity: 0.12,
-    },
+    pathOptions: { fillColor: color, color: '#ffffff', fillOpacity: 0.8, weight: 1.5, opacity: 0.12 },
   }
 }
 
@@ -85,19 +77,31 @@ function netlabStyle(dx: string): { radius: number; pathOptions: PathOptions } {
 }
 
 const LARVAS_LABEL: Record<string, string> = { si: 'Sí', no: 'No', no_seguro: 'Dudoso' }
-const ESTADO_LABEL: Record<string, string> = {
+const ESTADO_LABEL: Record<string, string>  = {
   enviado: 'Enviado', en_revision: 'En revisión', verificado: 'Verificado', resuelto: 'Resuelto',
 }
-const TIPO_LABEL: Record<string, string> = { C: 'Confirmado', P: 'Probable', S: 'Sospechoso' }
-const TIPO_COLOR: Record<string, string> = { C: '#f87171', P: '#fbbf24', S: '#60a5fa' }
+const TIPO_LABEL: Record<string, string>  = { C: 'Confirmado', P: 'Probable', S: 'Sospechoso' }
+const TIPO_COLOR: Record<string, string>  = { C: '#f87171', P: '#fbbf24', S: '#60a5fa' }
 
-// ── Componente ───────────────────────────────────────────────
+const DEFAULT_FILTROS: FiltrosDashboard = {
+  departamento: 'LORETO',
+  provincia: 'MAYNAS',
+  distrito: 'todos',
+  rango: '30d',
+}
+
 interface MapPanelProps {
   filtros?: FiltrosDashboard
   className?: string
 }
 
-export function MapPanel({ className }: MapPanelProps) {
+export function MapPanel({ filtros, className }: MapPanelProps) {
+  const f = filtros ?? DEFAULT_FILTROS
+
+  const { data: reportes   = [], isLoading: loadingR } = useReportes(f)
+  const { data: casosNoti  = [], isLoading: loadingN } = useCasosNoti(f)
+  const { data: casosNetlab = [], isLoading: loadingL } = useCasosNetlab(f)
+
   const [activeLayers, setActiveLayers] = useState<Set<CapaMapa>>(
     new Set(['criaderos', 'noti', 'netlab']),
   )
@@ -110,7 +114,8 @@ export function MapPanel({ className }: MapPanelProps) {
     })
   }
 
-  const totalPuntos = REPORTES_MOCK.length + CASOS_NOTI_MOCK.length + CASOS_NETLAB_MOCK.length
+  const totalPuntos  = reportes.length + casosNoti.length + casosNetlab.length
+  const anyLoading   = loadingR || loadingN || loadingL
 
   return (
     <div className={cn('glass-card flex flex-col overflow-hidden', className)}>
@@ -155,11 +160,11 @@ export function MapPanel({ className }: MapPanelProps) {
         </div>
 
         <span className="text-[10px] font-mono text-slate-600 ml-auto">
-          {totalPuntos} puntos
+          {anyLoading ? '…' : `${totalPuntos} puntos`}
         </span>
       </div>
 
-      {/* Contenedor del mapa */}
+      {/* Mapa */}
       <div className="flex-1 relative" style={{ minHeight: 260 }}>
         <MapContainer
           center={CENTER}
@@ -178,15 +183,10 @@ export function MapPanel({ className }: MapPanelProps) {
           {/* Criaderos */}
           {activeLayers.has('criaderos') && (
             <LayerGroup>
-              {REPORTES_MOCK.map(r => {
+              {reportes.map(r => {
                 const { radius, pathOptions } = criaderoStyle(r.observa_larvas)
                 return (
-                  <CircleMarker
-                    key={r.id}
-                    center={[r.latitud, r.longitud]}
-                    radius={radius}
-                    pathOptions={pathOptions}
-                  >
+                  <CircleMarker key={r.id} center={[r.latitud, r.longitud]} radius={radius} pathOptions={pathOptions}>
                     <Popup className="sivapre-popup">
                       <div className="mp-popup">
                         <p className="mp-title" style={{ color: '#22d3ee' }}>Criadero</p>
@@ -210,17 +210,12 @@ export function MapPanel({ className }: MapPanelProps) {
           {/* NOTI */}
           {activeLayers.has('noti') && (
             <LayerGroup>
-              {CASOS_NOTI_MOCK.map(c => {
+              {casosNoti.map(c => {
                 const [clat, clng] = districtCenter(c.distrito)
                 const [dlat, dlng] = jitter(c.id)
                 const { radius, pathOptions } = notiStyle(c.tipo_diagnostico)
                 return (
-                  <CircleMarker
-                    key={c.id}
-                    center={[clat + dlat, clng + dlng]}
-                    radius={radius}
-                    pathOptions={pathOptions}
-                  >
+                  <CircleMarker key={c.id} center={[clat + dlat, clng + dlng]} radius={radius} pathOptions={pathOptions}>
                     <Popup className="sivapre-popup">
                       <div className="mp-popup">
                         <p className="mp-title" style={{ color: '#60a5fa' }}>Caso NOTI</p>
@@ -244,17 +239,12 @@ export function MapPanel({ className }: MapPanelProps) {
           {/* NETLAB */}
           {activeLayers.has('netlab') && (
             <LayerGroup>
-              {CASOS_NETLAB_MOCK.map(c => {
+              {casosNetlab.map(c => {
                 const [clat, clng] = districtCenter(c.distrito_paciente)
                 const [dlat, dlng] = jitter(c.id)
                 const { radius, pathOptions } = netlabStyle(c.dx_molecular_dengue ?? '')
                 return (
-                  <CircleMarker
-                    key={c.id}
-                    center={[clat + dlat, clng + dlng]}
-                    radius={radius}
-                    pathOptions={pathOptions}
-                  >
+                  <CircleMarker key={c.id} center={[clat + dlat, clng + dlng]} radius={radius} pathOptions={pathOptions}>
                     <Popup className="sivapre-popup">
                       <div className="mp-popup">
                         <p className="mp-title" style={{ color: '#f87171' }}>NETLAB</p>
@@ -278,6 +268,16 @@ export function MapPanel({ className }: MapPanelProps) {
             </LayerGroup>
           )}
         </MapContainer>
+
+        {/* Indicador de carga sobre el mapa */}
+        {anyLoading && (
+          <div
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-mono pointer-events-none"
+            style={{ background: 'rgba(7,18,36,0.85)', color: 'rgba(34,211,238,0.6)', border: '1px solid rgba(34,211,238,0.15)' }}
+          >
+            Actualizando capas…
+          </div>
+        )}
       </div>
 
       {/* Footer */}
