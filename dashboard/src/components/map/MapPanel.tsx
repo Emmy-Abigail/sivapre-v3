@@ -1,23 +1,24 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
-import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
-import { Layers, Map as MapIcon } from 'lucide-react'
-import { IQUITOS_CENTER, IQUITOS_ZOOM, CAPAS_MAPA } from '@/config/regiones'
+import { useState } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Popup, LayerGroup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import { Layers } from 'lucide-react'
+import { IQUITOS_ZOOM, CAPAS_MAPA } from '@/config/regiones'
 import type { CapaMapa } from '@/config/regiones'
 import { REPORTES_MOCK } from '@/lib/mocks/reportes'
 import { CASOS_NOTI_MOCK } from '@/lib/mocks/casosNoti'
 import { CASOS_NETLAB_MOCK } from '@/lib/mocks/casosNetlab'
 import { cn } from '@/lib/utils'
 import type { FiltrosDashboard } from '@/types'
+import type { PathOptions } from 'leaflet'
 
-const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+// Iquitos center [lat, lng] — Leaflet uses lat-first convention
+const CENTER: [number, number] = [-3.7437, -73.2516]
 
-// ─── Centros aproximados por distrito ─────────────────────────
 const DISTRICT_CENTERS: Record<string, [number, number]> = {
-  IQUITOS:  [-73.2516, -3.7437],
-  PUNCHANA: [-73.2483, -3.7043],
-  BELEN:    [-73.2516, -3.7757],
+  IQUITOS:  [-3.7437, -73.2516],
+  PUNCHANA: [-3.7043, -73.2483],
+  BELEN:    [-3.7757, -73.2516],
 }
 
 function hashStr(s: string): number {
@@ -33,206 +34,73 @@ function jitter(id: string, scale = 0.004): [number, number] {
 }
 
 function districtCenter(name: string): [number, number] {
-  return DISTRICT_CENTERS[name.toUpperCase()] ?? (IQUITOS_CENTER as [number, number])
-}
-
-// ─── GeoJSON features (computados una vez al cargar el módulo) ─
-const criaderoFeatures = REPORTES_MOCK.map(r => ({
-  type: 'Feature' as const,
-  geometry: { type: 'Point' as const, coordinates: [r.longitud, r.latitud] as [number, number] },
-  properties: {
-    id: r.id,
-    tipo_lugar: r.tipo_lugar,
-    tipo_objeto: r.tipo_objeto,
-    observa_larvas: r.observa_larvas,
-    estado: r.estado,
-    fecha: r.fecha_reporte,
-  },
-}))
-
-const notiFeatures = CASOS_NOTI_MOCK.map(c => {
-  const [cx, cy] = districtCenter(c.distrito)
-  const [dx, dy] = jitter(c.id)
-  return {
-    type: 'Feature' as const,
-    geometry: { type: 'Point' as const, coordinates: [cx + dx, cy + dy] as [number, number] },
-    properties: {
-      id: c.id,
-      id_caso: c.id_caso_noti,
-      tipo: c.tipo_diagnostico,
-      semana: c.semana_epidemiologica,
-      distrito: c.distrito,
-    },
-  }
-})
-
-const netlabFeatures = CASOS_NETLAB_MOCK.map(c => {
-  const [cx, cy] = districtCenter(c.distrito_paciente)
-  const [dx, dy] = jitter(c.id)
-  return {
-    type: 'Feature' as const,
-    geometry: { type: 'Point' as const, coordinates: [cx + dx, cy + dy] as [number, number] },
-    properties: {
-      id: c.id,
-      id_muestra: c.id_muestra_netlab,
-      serotipo: c.serotipo_dengue,
-      dx: c.dx_molecular_dengue,
-      elisa: c.elisa_ns1,
-      fecha: c.fecha_validado,
-    },
-  }
-})
-
-// ─── HTML de popups ───────────────────────────────────────────
-function criaderoHTML(p: Record<string, unknown>): string {
-  const larvasColor = p.observa_larvas === 'si' ? '#f87171' : '#94a3b8'
-  const larvasLabel = ({ si: 'Sí', no: 'No', no_seguro: 'Dudoso' } as Record<string, string>)[p.observa_larvas as string] ?? '-'
-  const estadoLabel = ({ enviado: 'Enviado', en_revision: 'En revisión', verificado: 'Verificado', resuelto: 'Resuelto' } as Record<string, string>)[p.estado as string] ?? '-'
-  return `<div class="mp-popup"><p class="mp-title" style="color:#22d3ee">Criadero</p>
-    <p><span class="mp-k">Lugar:</span>${p.tipo_lugar}</p>
-    <p><span class="mp-k">Objeto:</span>${p.tipo_objeto}</p>
-    <p><span class="mp-k">Larvas:</span><span style="color:${larvasColor}">${larvasLabel}</span></p>
-    <p><span class="mp-k">Estado:</span>${estadoLabel}</p></div>`
-}
-
-function notiHTML(p: Record<string, unknown>): string {
-  const tipoLabel = ({ C: 'Confirmado', P: 'Probable', S: 'Sospechoso' } as Record<string, string>)[p.tipo as string] ?? '-'
-  const tipoColor = ({ C: '#f87171', P: '#fbbf24', S: '#60a5fa' } as Record<string, string>)[p.tipo as string] ?? '#94a3b8'
-  return `<div class="mp-popup"><p class="mp-title" style="color:#60a5fa">Caso NOTI</p>
-    <p><span class="mp-k">ID:</span>${p.id_caso}</p>
-    <p><span class="mp-k">Tipo:</span><span style="color:${tipoColor}">${tipoLabel}</span></p>
-    <p><span class="mp-k">SE:</span>${p.semana}</p>
-    <p><span class="mp-k">Distrito:</span>${p.distrito}</p></div>`
-}
-
-function netlabHTML(p: Record<string, unknown>): string {
-  const dxColor = p.dx === 'Positivo' ? '#f87171' : '#34d399'
-  return `<div class="mp-popup"><p class="mp-title" style="color:#f87171">NETLAB</p>
-    <p><span class="mp-k">Muestra:</span>${p.id_muestra}</p>
-    <p><span class="mp-k">RT-PCR:</span><span style="color:${dxColor}">${p.dx ?? 'N/D'}</span></p>
-    <p><span class="mp-k">Serotipo:</span><span style="color:#fbbf24">${p.serotipo ?? 'N/D'}</span></p>
-    <p><span class="mp-k">ELISA NS1:</span>${p.elisa ?? 'N/D'}</p></div>`
+  return DISTRICT_CENTERS[name.toUpperCase()] ?? CENTER
 }
 
 function hexRgb(hex: string): string {
   return `${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)}`
 }
 
-// ─── Componente ───────────────────────────────────────────────
+// ── Estilos condicionales por capa ───────────────────────────
+function criaderoStyle(observaLarvas: string): { radius: number; pathOptions: PathOptions } {
+  const critical = observaLarvas === 'si'
+  return {
+    radius: critical ? 8 : 5,
+    pathOptions: {
+      fillColor: critical ? '#f87171' : '#22d3ee',
+      color: critical ? '#fca5a5' : '#67e8f9',
+      fillOpacity: 0.85,
+      weight: 1.5,
+      opacity: 0.4,
+    },
+  }
+}
+
+function notiStyle(tipo: string): { radius: number; pathOptions: PathOptions } {
+  const color = tipo === 'C' ? '#f87171' : tipo === 'P' ? '#fbbf24' : '#60a5fa'
+  return {
+    radius: 7,
+    pathOptions: {
+      fillColor: color,
+      color: '#ffffff',
+      fillOpacity: 0.8,
+      weight: 1.5,
+      opacity: 0.12,
+    },
+  }
+}
+
+function netlabStyle(dx: string): { radius: number; pathOptions: PathOptions } {
+  const positive = dx === 'Positivo'
+  return {
+    radius: positive ? 10 : 6,
+    pathOptions: {
+      fillColor: positive ? '#ef4444' : '#475569',
+      color: positive ? '#fca5a5' : '#64748b',
+      fillOpacity: 0.9,
+      weight: 2,
+      opacity: 0.5,
+    },
+  }
+}
+
+const LARVAS_LABEL: Record<string, string> = { si: 'Sí', no: 'No', no_seguro: 'Dudoso' }
+const ESTADO_LABEL: Record<string, string> = {
+  enviado: 'Enviado', en_revision: 'En revisión', verificado: 'Verificado', resuelto: 'Resuelto',
+}
+const TIPO_LABEL: Record<string, string> = { C: 'Confirmado', P: 'Probable', S: 'Sospechoso' }
+const TIPO_COLOR: Record<string, string> = { C: '#f87171', P: '#fbbf24', S: '#60a5fa' }
+
+// ── Componente ───────────────────────────────────────────────
 interface MapPanelProps {
   filtros?: FiltrosDashboard
   className?: string
 }
 
 export function MapPanel({ className }: MapPanelProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<mapboxgl.Map | null>(null)
-  const [mapLoaded, setMapLoaded] = useState(false)
   const [activeLayers, setActiveLayers] = useState<Set<CapaMapa>>(
     new Set(['criaderos', 'noti', 'netlab']),
   )
-
-  useEffect(() => {
-    if (!TOKEN || !containerRef.current) return
-
-    mapboxgl.accessToken = TOKEN
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: IQUITOS_CENTER as [number, number],
-      zoom: IQUITOS_ZOOM,
-    })
-    mapRef.current = map
-
-    map.on('load', () => {
-      // Sources
-      map.addSource('criaderos-src', { type: 'geojson', data: { type: 'FeatureCollection', features: criaderoFeatures } })
-      map.addSource('noti-src',      { type: 'geojson', data: { type: 'FeatureCollection', features: notiFeatures } })
-      map.addSource('netlab-src',    { type: 'geojson', data: { type: 'FeatureCollection', features: netlabFeatures } })
-
-      // Criaderos — cian, rojo si larvas detectadas
-      map.addLayer({
-        id: 'criaderos-layer', type: 'circle', source: 'criaderos-src',
-        paint: {
-          'circle-radius': ['case', ['==', ['get', 'observa_larvas'], 'si'], 8, 5],
-          'circle-color':  ['case', ['==', ['get', 'observa_larvas'], 'si'], '#f87171', '#22d3ee'],
-          'circle-opacity': 0.85,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': ['case', ['==', ['get', 'observa_larvas'], 'si'], '#fca5a5', '#67e8f9'],
-          'circle-stroke-opacity': 0.4,
-        },
-      })
-
-      // NOTI — azul/ámbar/rojo según tipo_diagnóstico
-      map.addLayer({
-        id: 'noti-layer', type: 'circle', source: 'noti-src',
-        paint: {
-          'circle-radius': 7,
-          'circle-color': ['case',
-            ['==', ['get', 'tipo'], 'C'], '#f87171',
-            ['==', ['get', 'tipo'], 'P'], '#fbbf24',
-            '#60a5fa',
-          ],
-          'circle-opacity': 0.8,
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-opacity': 0.12,
-        },
-      })
-
-      // NETLAB — mayor tamaño si positivo
-      map.addLayer({
-        id: 'netlab-layer', type: 'circle', source: 'netlab-src',
-        paint: {
-          'circle-radius': ['case', ['==', ['get', 'dx'], 'Positivo'], 10, 6],
-          'circle-color':  ['case', ['==', ['get', 'dx'], 'Positivo'], '#ef4444', '#475569'],
-          'circle-opacity': 0.9,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': ['case', ['==', ['get', 'dx'], 'Positivo'], '#fca5a5', '#64748b'],
-          'circle-stroke-opacity': 0.5,
-        },
-      })
-
-      // Popups
-      const popup = new mapboxgl.Popup({ closeButton: true, maxWidth: '220px', className: 'sivapre-popup' })
-
-      map.on('click', 'criaderos-layer', e => {
-        const f = e.features?.[0]
-        if (!f || f.geometry.type !== 'Point') return
-        popup.setLngLat(f.geometry.coordinates as [number, number]).setHTML(criaderoHTML(f.properties ?? {})).addTo(map)
-      })
-      map.on('click', 'noti-layer', e => {
-        const f = e.features?.[0]
-        if (!f || f.geometry.type !== 'Point') return
-        popup.setLngLat(f.geometry.coordinates as [number, number]).setHTML(notiHTML(f.properties ?? {})).addTo(map)
-      })
-      map.on('click', 'netlab-layer', e => {
-        const f = e.features?.[0]
-        if (!f || f.geometry.type !== 'Point') return
-        popup.setLngLat(f.geometry.coordinates as [number, number]).setHTML(netlabHTML(f.properties ?? {})).addTo(map)
-      })
-
-      for (const lyr of ['criaderos-layer', 'noti-layer', 'netlab-layer']) {
-        map.on('mouseenter', lyr, () => { map.getCanvas().style.cursor = 'pointer' })
-        map.on('mouseleave', lyr, () => { map.getCanvas().style.cursor = '' })
-      }
-
-      setMapLoaded(true)
-    })
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-    for (const capa of CAPAS_MAPA) {
-      map.setLayoutProperty(`${capa.id}-layer`, 'visibility', activeLayers.has(capa.id) ? 'visible' : 'none')
-    }
-  }, [activeLayers, mapLoaded])
 
   function toggleLayer(id: CapaMapa) {
     setActiveLayers(prev => {
@@ -242,7 +110,7 @@ export function MapPanel({ className }: MapPanelProps) {
     })
   }
 
-  const totalPuntos = criaderoFeatures.length + notiFeatures.length + netlabFeatures.length
+  const totalPuntos = REPORTES_MOCK.length + CASOS_NOTI_MOCK.length + CASOS_NETLAB_MOCK.length
 
   return (
     <div className={cn('glass-card flex flex-col overflow-hidden', className)}>
@@ -293,30 +161,123 @@ export function MapPanel({ className }: MapPanelProps) {
 
       {/* Contenedor del mapa */}
       <div className="flex-1 relative" style={{ minHeight: 260 }}>
-        {TOKEN ? (
-          <div
-            ref={containerRef}
-            style={{ position: 'absolute', inset: 0 }}
-            aria-label="Mapa interactivo de Iquitos"
-            role="img"
+        <MapContainer
+          center={CENTER}
+          zoom={IQUITOS_ZOOM}
+          style={{ position: 'absolute', inset: 0, height: '100%', width: '100%' }}
+          zoomControl
+          attributionControl
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            subdomains="abcd"
+            maxZoom={20}
           />
-        ) : (
-          <div
-            className="w-full h-full radar-grid flex flex-col items-center justify-center gap-3 text-center p-8"
-            style={{ minHeight: 260 }}
-          >
-            <MapIcon size={32} style={{ color: 'rgba(34,211,238,0.3)' }} aria-hidden />
-            <div>
-              <p className="text-xs font-mono text-slate-500">Mapa no disponible</p>
-              <p className="text-[10px] text-slate-600 mt-1">
-                Configura{' '}
-                <span className="font-mono" style={{ color: 'rgba(34,211,238,0.5)' }}>
-                  NEXT_PUBLIC_MAPBOX_TOKEN
-                </span>
-              </p>
-            </div>
-          </div>
-        )}
+
+          {/* Criaderos */}
+          {activeLayers.has('criaderos') && (
+            <LayerGroup>
+              {REPORTES_MOCK.map(r => {
+                const { radius, pathOptions } = criaderoStyle(r.observa_larvas)
+                return (
+                  <CircleMarker
+                    key={r.id}
+                    center={[r.latitud, r.longitud]}
+                    radius={radius}
+                    pathOptions={pathOptions}
+                  >
+                    <Popup className="sivapre-popup">
+                      <div className="mp-popup">
+                        <p className="mp-title" style={{ color: '#22d3ee' }}>Criadero</p>
+                        <p><span className="mp-k">Lugar:</span>{r.tipo_lugar}</p>
+                        <p><span className="mp-k">Objeto:</span>{r.tipo_objeto}</p>
+                        <p>
+                          <span className="mp-k">Larvas:</span>
+                          <span style={{ color: r.observa_larvas === 'si' ? '#f87171' : '#94a3b8' }}>
+                            {LARVAS_LABEL[r.observa_larvas] ?? '-'}
+                          </span>
+                        </p>
+                        <p><span className="mp-k">Estado:</span>{ESTADO_LABEL[r.estado] ?? '-'}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )
+              })}
+            </LayerGroup>
+          )}
+
+          {/* NOTI */}
+          {activeLayers.has('noti') && (
+            <LayerGroup>
+              {CASOS_NOTI_MOCK.map(c => {
+                const [clat, clng] = districtCenter(c.distrito)
+                const [dlat, dlng] = jitter(c.id)
+                const { radius, pathOptions } = notiStyle(c.tipo_diagnostico)
+                return (
+                  <CircleMarker
+                    key={c.id}
+                    center={[clat + dlat, clng + dlng]}
+                    radius={radius}
+                    pathOptions={pathOptions}
+                  >
+                    <Popup className="sivapre-popup">
+                      <div className="mp-popup">
+                        <p className="mp-title" style={{ color: '#60a5fa' }}>Caso NOTI</p>
+                        <p><span className="mp-k">ID:</span>{c.id_caso_noti}</p>
+                        <p>
+                          <span className="mp-k">Tipo:</span>
+                          <span style={{ color: TIPO_COLOR[c.tipo_diagnostico] ?? '#94a3b8' }}>
+                            {TIPO_LABEL[c.tipo_diagnostico] ?? '-'}
+                          </span>
+                        </p>
+                        <p><span className="mp-k">SE:</span>{c.semana_epidemiologica}</p>
+                        <p><span className="mp-k">Distrito:</span>{c.distrito}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )
+              })}
+            </LayerGroup>
+          )}
+
+          {/* NETLAB */}
+          {activeLayers.has('netlab') && (
+            <LayerGroup>
+              {CASOS_NETLAB_MOCK.map(c => {
+                const [clat, clng] = districtCenter(c.distrito_paciente)
+                const [dlat, dlng] = jitter(c.id)
+                const { radius, pathOptions } = netlabStyle(c.dx_molecular_dengue ?? '')
+                return (
+                  <CircleMarker
+                    key={c.id}
+                    center={[clat + dlat, clng + dlng]}
+                    radius={radius}
+                    pathOptions={pathOptions}
+                  >
+                    <Popup className="sivapre-popup">
+                      <div className="mp-popup">
+                        <p className="mp-title" style={{ color: '#f87171' }}>NETLAB</p>
+                        <p><span className="mp-k">Muestra:</span>{c.id_muestra_netlab}</p>
+                        <p>
+                          <span className="mp-k">RT-PCR:</span>
+                          <span style={{ color: c.dx_molecular_dengue === 'Positivo' ? '#f87171' : '#34d399' }}>
+                            {c.dx_molecular_dengue ?? 'N/D'}
+                          </span>
+                        </p>
+                        <p>
+                          <span className="mp-k">Serotipo:</span>
+                          <span style={{ color: '#fbbf24' }}>{c.serotipo_dengue ?? 'N/D'}</span>
+                        </p>
+                        <p><span className="mp-k">ELISA NS1:</span>{c.elisa_ns1 ?? 'N/D'}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )
+              })}
+            </LayerGroup>
+          )}
+        </MapContainer>
       </div>
 
       {/* Footer */}
@@ -324,9 +285,9 @@ export function MapPanel({ className }: MapPanelProps) {
         className="shrink-0 px-4 py-2 flex items-center justify-between border-t"
         style={{ borderColor: 'rgba(255,255,255,0.04)' }}
       >
-        <span className="text-[10px] font-mono text-slate-600">Iquitos · Loreto · Perú</span>
+        <span className="text-[10px] font-mono text-slate-600">Iquitos · Loreto · Perú · OSM</span>
         <span className="text-[10px] font-mono text-slate-600">
-          {Math.abs(IQUITOS_CENTER[1]).toFixed(4)}°S {Math.abs(IQUITOS_CENTER[0]).toFixed(4)}°W
+          {Math.abs(CENTER[0]).toFixed(4)}°S {Math.abs(CENTER[1]).toFixed(4)}°W
         </span>
       </div>
     </div>

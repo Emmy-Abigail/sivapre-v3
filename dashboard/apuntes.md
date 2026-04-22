@@ -15,16 +15,15 @@ Ejecuta en la terminal (dentro de la carpeta `dashboard`):
 cp .env.local.example .env.local
 ```
 
-Luego abre el archivo `.env.local` y verifica las siguientes variables:
+El archivo `.env.local` solo necesita:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-NEXT_PUBLIC_MAPBOX_TOKEN=
 ```
 
-* `NEXT_PUBLIC_API_BASE_URL`: ya apunta a tu backend local.
-* `NEXT_PUBLIC_MAPBOX_TOKEN`: debes colocar aquí un token gratuito de Mapbox para habilitar el mapa.
-  Puedes dejarlo vacío temporalmente, pero el mapa no renderizará.
+* `NEXT_PUBLIC_API_BASE_URL`: apunta a tu backend local.
+
+El mapa usa **OpenStreetMap + CartoDB Dark Matter** — es 100% open source y no requiere ningún token.
 
 ---
 
@@ -76,7 +75,7 @@ Esto iniciará los contenedores en segundo plano.
 
 * Frontend corriendo en: `http://localhost:3000`
 * Backend disponible en: `http://localhost:8000`
-* Dashboard visible (sin mapa si no configuras Mapbox)
+* Mapa de Iquitos visible inmediatamente (tiles CartoDB Dark Matter vía OSM, sin token)
 
 ---
 
@@ -84,6 +83,6 @@ Esto iniciará los contenedores en segundo plano.
 
 * **Pantalla en blanco**: revisa la consola del navegador.
 * **Error de conexión al backend**: verifica que Docker esté corriendo.
-* **Mapa no carga**: falta el `NEXT_PUBLIC_MAPBOX_TOKEN`.
+* **Mapa no carga**: verifica conexión a internet (los tiles se sirven desde `basemaps.cartocdn.com`).
 
 ---
