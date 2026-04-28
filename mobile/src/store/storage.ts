@@ -5,6 +5,8 @@ export const StorageKeys = {
   AUTH_TOKEN: 'auth_token',
   REFRESH_TOKEN: 'refresh_token',
   USER_DATA: 'user_data',
+  NOTIF_ALERTAS: 'notif_alertas',
+  NOTIF_ESTADO_REPORTE: 'notif_estado_reporte',
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

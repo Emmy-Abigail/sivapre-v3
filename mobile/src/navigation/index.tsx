@@ -18,6 +18,7 @@ import ReportScreen from '../screens/ReportScreen';
 import MyReportsScreen from '../screens/MyReportsScreen';
 import InfoScreen from '../screens/InfoScreen';
 import ReporteDetalleScreen from '../screens/ReporteDetalleScreen';
+import PerfilScreen from '../screens/PerfilScreen';
 import type { MainStackParamList } from '../types';
 
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -163,6 +164,11 @@ function MainNavigator() {
       <MainStack.Screen
         name="ReporteDetalle"
         component={ReporteDetalleScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MainStack.Screen
+        name="Perfil"
+        component={PerfilScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </MainStack.Navigator>

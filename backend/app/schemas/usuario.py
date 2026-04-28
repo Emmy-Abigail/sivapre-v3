@@ -11,11 +11,22 @@ class UsuarioBase(BaseModel):
     apellido: str | None = Field(None, max_length=100)
     email: EmailStr
     telefono: str | None = Field(None, max_length=20)
+    departamento: str | None = Field(None, max_length=100)
+    provincia: str | None = Field(None, max_length=100)
     distrito: str | None = Field(None, max_length=100)
 
 
 class UsuarioCreate(UsuarioBase):
     password: str = Field(..., min_length=8)
+
+
+class UsuarioUpdate(BaseModel):
+    nombre: str | None = Field(None, max_length=150)
+    apellido: str | None = Field(None, max_length=100)
+    telefono: str | None = Field(None, max_length=20)
+    departamento: str | None = Field(None, max_length=100)
+    provincia: str | None = Field(None, max_length=100)
+    distrito: str | None = Field(None, max_length=100)
 
 
 class UsuarioResponse(BaseModel):
@@ -24,6 +35,9 @@ class UsuarioResponse(BaseModel):
     apellido: str | None = None
     email: str
     telefono: str | None = None
+    departamento: str | None = None
+    provincia: str | None = None
+    distrito: str | None = None
     rol: RolEnum
     creadoEn: datetime
 
@@ -39,6 +53,9 @@ class UsuarioResponse(BaseModel):
                 'apellido': data.apellido,
                 'email': data.email,
                 'telefono': data.telefono,
+                'departamento': data.departamento,
+                'provincia': data.provincia,
+                'distrito': data.distrito,
                 'rol': data.rol,
                 'creadoEn': data.fecha_registro,
             }

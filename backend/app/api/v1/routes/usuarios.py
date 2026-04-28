@@ -14,7 +14,8 @@ from app.core.security import (
 )
 from app.models.usuario import Usuario
 from app.schemas.auth import LoginRequest
-from app.schemas.usuario import AuthResponse, UsuarioCreate, UsuarioResponse
+from app.schemas.responses import ApiResponse
+from app.schemas.usuario import AuthResponse, UsuarioCreate, UsuarioResponse, UsuarioUpdate
 
 router = APIRouter(tags=["Auth"])
 
@@ -37,6 +38,8 @@ async def register(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
         apellido=data.apellido,
         email=data.email,
         telefono=data.telefono,
+        departamento=data.departamento,
+        provincia=data.provincia,
         distrito=data.distrito,
         hashed_password=hash_password(data.password),
     )
@@ -84,3 +87,30 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 )
 async def logout(_: Usuario = Depends(get_current_user)):
     return {"mensaje": "Sesión cerrada correctamente."}
+
+
+@router.get(
+    "/perfil",
+    response_model=ApiResponse[UsuarioResponse],
+    summary="Retorna el perfil del usuario autenticado",
+)
+async def obtener_perfil(current_user: Usuario = Depends(get_current_user)):
+    return ApiResponse(data=UsuarioResponse.model_validate(current_user))
+
+
+@router.patch(
+    "/perfil",
+    response_model=ApiResponse[UsuarioResponse],
+    summary="Actualiza nombre, teléfono y ubigeo del usuario autenticado",
+)
+async def actualizar_perfil(
+    data: UsuarioUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    cambios = data.model_dump(exclude_none=True)
+    for campo, valor in cambios.items():
+        setattr(current_user, campo, valor)
+    await db.flush()
+    await db.refresh(current_user)
+    return ApiResponse(data=UsuarioResponse.model_validate(current_user))

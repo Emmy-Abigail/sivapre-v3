@@ -12,6 +12,9 @@ export interface Usuario {
   apellido: string;
   email: string;
   telefono?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
   rol: 'ciudadano' | 'inspector' | 'admin';
   creadoEn: string;
 }
@@ -27,6 +30,9 @@ export interface RegisterPayload {
   email: string;
   password: string;
   telefono?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
 }
 
 export interface AuthResponse {
@@ -117,4 +123,5 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   Tabs: undefined;
   ReporteDetalle: { id: string };
+  Perfil: undefined;
 };

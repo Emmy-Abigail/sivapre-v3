@@ -18,6 +18,8 @@ class Usuario(Base):
     apellido: Mapped[str | None] = mapped_column(String(100), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     telefono: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    departamento: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provincia: Mapped[str | None] = mapped_column(String(100), nullable=True)
     distrito: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rol: Mapped[str] = mapped_column(String(50), default='ciudadano', server_default='ciudadano')
     hashed_password: Mapped[str] = mapped_column(String(255))

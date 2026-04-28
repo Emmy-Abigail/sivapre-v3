@@ -1,3 +1,5 @@
+// HomeScreen
+
 import React from 'react';
 import {
   View,
@@ -10,15 +12,20 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { useAuth } from '../hooks/useAuth';
 import { useMisReportes } from '../hooks/useReportes';
 import type { AppColors } from '../theme';
-import type { MainTabParamList } from '../types';
+import type { MainTabParamList, MainStackParamList } from '../types';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type Props = BottomTabScreenProps<MainTabParamList, 'Home'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<MainStackParamList>
+>;
 
 // ─── Datos estáticos de alertas (reemplazar con fetch real cuando esté listo) ──
 
@@ -128,11 +135,15 @@ export default function HomeScreen({ navigation }: Props) {
             Gracias por cuidar tu comunidad
           </Text>
         </View>
-        <View style={[styles.avatar, { backgroundColor: colors.surfaceVariant, borderColor: colors.primary }]}>
+        <TouchableOpacity
+          style={[styles.avatar, { backgroundColor: colors.surfaceVariant, borderColor: colors.primary }]}
+          onPress={() => navigation.navigate('Perfil')}
+          activeOpacity={0.75}
+        >
           <Text style={[styles.avatarInitial, { color: colors.primary }]}>
             {primerNombre.charAt(0).toUpperCase()}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* ── Botón principal ── */}

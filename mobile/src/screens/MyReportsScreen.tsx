@@ -10,15 +10,20 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useTheme } from '../theme';
 import { useMisReportes } from '../hooks/useReportes';
-import type { MainStackParamList, Reporte, EstadoReporte } from '../types';
+import type { MainTabParamList, MainStackParamList, Reporte, EstadoReporte } from '../types';
 
 // ─── Tipos y constantes ───────────────────────────────────────────────────────
 
-type Props = NativeStackScreenProps<MainStackParamList, 'Tabs'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'MyReports'>,
+  NativeStackScreenProps<MainStackParamList>
+>;
 
 type Filtro = 'Todos' | EstadoReporte;
 
