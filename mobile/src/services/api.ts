@@ -2,6 +2,7 @@
 
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { storage, StorageKeys } from '../store/storage';
+import { triggerUnauthorized } from '../store/auth-signal';
 
 // Cambia esta URL por la IP/dominio real del backend en cada entorno
 export const BASE_URL = __DEV__
@@ -31,12 +32,12 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Token expirado: limpia credenciales
       await Promise.all([
         storage.removeItem(StorageKeys.AUTH_TOKEN),
         storage.removeItem(StorageKeys.REFRESH_TOKEN),
         storage.removeItem(StorageKeys.USER_DATA),
       ]);
+      triggerUnauthorized();
     }
     return Promise.reject(error);
   },

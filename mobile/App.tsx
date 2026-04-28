@@ -1,3 +1,5 @@
+// App.tsx
+
 import React, { useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -8,7 +10,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import RootNavigator from './src/navigation';
-import { useTheme } from './src/theme';
+import { useTheme, ThemeProvider } from './src/theme';
 import { markFontsReady } from './src/theme/typography';
 import { AuthProvider } from './src/store/auth-context';
 
@@ -88,11 +90,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <View style={styles.root} onLayout={onRootLayout}>
-            <AppContent />
-          </View>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <View style={styles.root} onLayout={onRootLayout}>
+              <AppContent />
+            </View>
+          </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

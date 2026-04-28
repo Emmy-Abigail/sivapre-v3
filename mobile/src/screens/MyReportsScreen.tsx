@@ -106,7 +106,7 @@ function ReporteCard({ reporte, colors, onPress }: ReporteCardProps) {
 export default function MyReportsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { data, isLoading, refetch, isRefetching } = useMisReportes();
+  const { data, isLoading, isError, refetch, isRefetching } = useMisReportes();
   const [filtroActivo, setFiltroActivo] = useState<Filtro>('Todos');
 
   const reportes = data?.data ?? [];
@@ -124,6 +124,23 @@ export default function MyReportsScreen({ navigation }: Props) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Ionicons name="cloud-offline-outline" size={48} color={colors.textDisabled} />
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+          No se pudieron cargar tus reportes.{'\n'}Verifica tu conexión o vuelve a iniciar sesión.
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+          onPress={() => refetch()}
+        >
+          <Text style={[styles.retryText, { color: colors.textOnPrimary }]}>Reintentar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -341,6 +358,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   emptyLink: {
+    fontFamily: 'Montserrat-ExtraBold',
+    fontSize: 14,
+  },
+  errorText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 22,
+  },
+  retryBtn: {
+    marginTop: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 14,
   },
