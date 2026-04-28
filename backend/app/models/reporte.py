@@ -31,9 +31,9 @@ class Reporte(Base):
     foto_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     tipo_lugar: Mapped[str] = mapped_column(String(100))
     tipo_objeto: Mapped[str] = mapped_column(String(100))
-    observa_larvas: Mapped[str] = mapped_column(String(10))
+    observa_larvas: Mapped[str] = mapped_column(String(50))
     conocimiento_dengue_cercano: Mapped[str | None] = mapped_column(
-        String(10), nullable=True
+        String(50), nullable=True
     )
     comentarios: Mapped[str | None] = mapped_column(Text, nullable=True)
     estado: Mapped[str] = mapped_column(String(50), default="enviado")

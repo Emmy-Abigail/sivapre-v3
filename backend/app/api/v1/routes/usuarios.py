@@ -17,11 +17,7 @@ from app.schemas.usuario import UsuarioCreate, UsuarioResponse
 router = APIRouter(tags=["Auth"])
 
 
-@router.post(
-    "/register",
-    response_model=UsuarioResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
     # Verificar email único
     result = await db.execute(select(Usuario).where(Usuario.email == data.email))
@@ -39,12 +35,26 @@ async def register(data: UsuarioCreate, db: AsyncSession = Depends(get_db)):
         hashed_password=hash_password(data.password),
     )
     db.add(user)
-    await db.flush()   # obtiene el id generado sin cerrar la sesión
+    await db.flush()
     await db.refresh(user)
-    return user
+    
+    token = create_access_token(data={"sub": user.email})
+    return {
+        "token": token,
+        "refreshToken": token,
+        "usuario": {
+            "id": str(user.id),
+            "nombre": user.nombre,
+            "apellido": user.nombre,
+            "email": user.email,
+            "telefono": user.telefono,
+            "rol": "ciudadano",
+            "creadoEn": str(user.fecha_registro)
+        }
+    }
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Usuario).where(Usuario.email == data.email))
     user = result.scalar_one_or_none()
@@ -65,4 +75,16 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     user.ultimo_acceso = datetime.now(timezone.utc)
 
     token = create_access_token(data={"sub": user.email})
-    return Token(access_token=token)
+    return {
+        "token": token,
+        "refreshToken": token,
+        "usuario": {
+            "id": str(user.id),
+            "nombre": user.nombre,
+            "apellido": user.nombre,
+            "email": user.email,
+            "telefono": user.telefono,
+            "rol": "ciudadano",
+            "creadoEn": str(user.fecha_registro)
+        }
+    }

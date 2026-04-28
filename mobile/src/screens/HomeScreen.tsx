@@ -95,7 +95,7 @@ function AlertaCard({ zona, nivel, descripcion, colors }: AlertaCardProps) {
 
 export default function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
-  const { usuario } = useAuth();
+  const { usuario, logout } = useAuth();
   const { data, isLoading } = useMisReportes();
   const insets = useSafeAreaInsets();
 
@@ -128,10 +128,20 @@ export default function HomeScreen({ navigation }: Props) {
             Gracias por cuidar tu comunidad
           </Text>
         </View>
-        <View style={[styles.avatar, { backgroundColor: colors.surfaceVariant, borderColor: colors.primary }]}>
-          <Text style={[styles.avatarInitial, { color: colors.primary }]}>
-            {primerNombre.charAt(0).toUpperCase()}
-          </Text>
+        
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={[styles.avatar, { backgroundColor: colors.surfaceVariant, borderColor: colors.primary }]}>
+            <Text style={[styles.avatarInitial, { color: colors.primary }]}>
+              {primerNombre.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          
+          <TouchableOpacity 
+            onPress={logout}
+            style={{ padding: 8, backgroundColor: 'rgba(255,0,60,0.1)', borderRadius: 12, borderWidth: 1, borderColor: '#ff003c' }}
+          >
+            <Ionicons name="log-out-outline" size={20} color="#ff003c" />
+          </TouchableOpacity>
         </View>
       </View>
 

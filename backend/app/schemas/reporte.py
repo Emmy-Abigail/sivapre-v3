@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 class ReporteBase(BaseModel):
     tipo_lugar: str = Field(..., max_length=100)
     tipo_objeto: str = Field(..., max_length=100)
-    observa_larvas: str = Field(..., max_length=10)
-    conocimiento_dengue_cercano: str | None = Field(None, max_length=10)
+    observa_larvas: str = Field(..., max_length=50)
+    conocimiento_dengue_cercano: str | None = Field(None, max_length=50)
     comentarios: str | None = None
 
 
