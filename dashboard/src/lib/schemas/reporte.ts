@@ -9,9 +9,9 @@ export const ReporteSchema = z.object({
   foto_url: z.string().url().nullable(),
   tipo_lugar: z.string().max(100),
   tipo_objeto: z.string().max(100),
-  // Backend almacena: 'si' | 'no' | 'no_seguro'
-  observa_larvas: z.enum(['si', 'no', 'no_seguro']),
-  conocimiento_dengue_cercano: z.enum(['si', 'no', 'no_sabe']).nullable(),
+  // Backend now stores actual phrases sent by the mobile app
+  observa_larvas: z.string(),
+  conocimiento_dengue_cercano: z.string().nullable(),
   comentarios: z.string().nullable(),
   estado: z.enum(['enviado', 'en_revision', 'verificado', 'resuelto']),
   fecha_reporte: z.string().datetime({ offset: true }),

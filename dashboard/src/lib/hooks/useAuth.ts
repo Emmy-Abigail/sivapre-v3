@@ -22,7 +22,7 @@ export function useAuth() {
   const loginMutation = useMutation({
     mutationFn: async ({ email, password }: { email: string; password: string }) => {
       const { data } = await axios.post(`${BASE_URL}/api/v1/auth/login`, { email, password })
-      return data.access_token as string
+      return data.token as string
     },
     onSuccess: (newToken) => {
       localStorage.setItem(TOKEN_KEY, newToken)

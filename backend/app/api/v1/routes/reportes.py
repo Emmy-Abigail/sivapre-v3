@@ -85,6 +85,45 @@ async def listar_reportes(
     return result.scalars().all()
 
 
+@router.get("/mis-reportes")
+async def listar_mis_reportes(
+    pagina: int = Query(1, ge=1),
+    porPagina: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    skip = (pagina - 1) * porPagina
+    
+    # Obtener el total
+    total_query = select(func.count(Reporte.id)).where(Reporte.usuario_id == current_user.id)
+    total_result = await db.execute(total_query)
+    total = total_result.scalar() or 0
+
+    # Obtener los items
+    query = (
+        select(Reporte)
+        .where(Reporte.usuario_id == current_user.id)
+        .order_by(Reporte.fecha_reporte.desc())
+        .offset(skip)
+        .limit(porPagina)
+    )
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    import math
+    paginas = math.ceil(total / porPagina) if total > 0 else 1
+
+    return {
+        "data": {
+            "items": items,
+            "total": total,
+            "pagina": pagina,
+            "porPagina": porPagina,
+            "paginas": paginas,
+        }
+    }
+
+
 @router.get("/{reporte_id}", response_model=ReporteResponse)
 async def obtener_reporte(
     reporte_id: uuid.UUID,
