@@ -6,7 +6,7 @@ import { triggerUnauthorized } from '../store/auth-signal';
 
 // Cambia esta URL por la IP/dominio real del backend en cada entorno
 export const BASE_URL = __DEV__
-  ? 'http://10.219.213.205:8000/api/v1'
+  ? 'http://10.211.180.205:8000/api/v1'
   : 'https://api.sivapre.gob/api/v1';
 
 export const api = axios.create({
