@@ -1,8 +1,13 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import api_router
 from app.core.config import settings
+
+# Crear carpeta para fotos locales si no existe
+os.makedirs("static/uploads", exist_ok=True)
 
 app = FastAPI(
     title="SIVAPRE API",
@@ -15,6 +20,9 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
 )
+
+# ─── Static Files ────────────────────────────────────────────────────────────
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
 # En producción reemplazar allow_origins con los dominios reales

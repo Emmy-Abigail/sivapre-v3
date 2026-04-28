@@ -1,7 +1,9 @@
 import uuid
+import os
+import shutil
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +18,19 @@ router = APIRouter(tags=["Reportes"])
 
 _RANGO_DIAS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
 
+@router.post("/foto")
+async def subir_foto(
+    foto: UploadFile = File(...),
+    _: Usuario = Depends(get_current_user),
+):
+    ext = foto.filename.split(".")[-1] if foto.filename and "." in foto.filename else "jpg"
+    filename = f"{uuid.uuid4()}.{ext}"
+    filepath = os.path.join("static", "uploads", filename)
+    
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(foto.file, buffer)
+        
+    return {"data": {"url": f"http://172.28.19.126:8000/static/uploads/{filename}"}}
 
 @router.post(
     "",
