@@ -15,7 +15,7 @@ from app.core.security import (
 from app.models.usuario import Usuario
 from app.schemas.auth import LoginRequest
 from app.schemas.responses import ApiResponse
-from app.schemas.usuario import AuthResponse, UsuarioCreate, UsuarioResponse, UsuarioUpdate
+from app.schemas.usuario import AuthResponse, CambiarPasswordRequest, UsuarioCreate, UsuarioResponse, UsuarioUpdate
 
 router = APIRouter(tags=["Auth"])
 
@@ -114,3 +114,23 @@ async def actualizar_perfil(
     await db.flush()
     await db.refresh(current_user)
     return ApiResponse(data=UsuarioResponse.model_validate(current_user))
+
+
+@router.post(
+    "/perfil/password",
+    status_code=status.HTTP_200_OK,
+    summary="Cambia la contraseña del usuario autenticado",
+)
+async def cambiar_password(
+    data: CambiarPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if not verify_password(data.password_actual, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual es incorrecta",
+        )
+    current_user.hashed_password = hash_password(data.password_nuevo)
+    await db.flush()
+    return {"mensaje": "Contraseña actualizada correctamente"}

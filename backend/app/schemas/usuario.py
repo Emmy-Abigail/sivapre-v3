@@ -62,6 +62,11 @@ class UsuarioResponse(BaseModel):
         return data
 
 
+class CambiarPasswordRequest(BaseModel):
+    password_actual: str
+    password_nuevo: str = Field(..., min_length=8)
+
+
 class AuthResponse(BaseModel):
     token: str
     refreshToken: str

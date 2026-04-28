@@ -4,18 +4,22 @@ import type {
   LoginPayload,
   RegisterPayload,
   AuthResponse,
+  UpdatePerfilPayload,
+  CambiarPasswordPayload,
+  Usuario,
+  ApiResponse,
 } from '../types';
 
 export const authService = {
   async login(payload: LoginPayload): Promise<AuthResponse> {
     const { data } = await api.post<AuthResponse>('/auth/login', payload);
-    _persistSession(data);
+    await _persistSession(data);
     return data;
   },
 
   async register(payload: RegisterPayload): Promise<AuthResponse> {
     const { data } = await api.post<AuthResponse>('/auth/register', payload);
-    _persistSession(data);
+    // No persiste sesión: el usuario debe iniciar sesión manualmente
     return data;
   },
 
@@ -29,6 +33,16 @@ export const authService = {
         storage.removeItem(StorageKeys.USER_DATA),
       ]);
     }
+  },
+
+  async updatePerfil(payload: UpdatePerfilPayload): Promise<ApiResponse<Usuario>> {
+    const { data } = await api.patch<ApiResponse<Usuario>>('/auth/perfil', payload);
+    await storage.setItem(StorageKeys.USER_DATA, JSON.stringify(data.data));
+    return data;
+  },
+
+  async changePassword(payload: CambiarPasswordPayload): Promise<void> {
+    await api.post('/auth/perfil/password', payload);
   },
 
   async getToken(): Promise<string | null> {

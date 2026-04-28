@@ -1,25 +1,12 @@
 // useAuth.ts
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { authService } from '../services/auth';
-import { storage, StorageKeys } from '../store/storage';
 import { useAuthContext } from '../store/auth-context';
-import type { LoginPayload, RegisterPayload, Usuario } from '../types';
+import type { LoginPayload, RegisterPayload, UpdatePerfilPayload, CambiarPasswordPayload } from '../types';
 
 export function useAuth() {
-  const { setIsAuthenticated } = useAuthContext();
-  const [usuario, setUsuario] = useState<Usuario | null>(null);
-
-  useEffect(() => {
-    storage.getItem(StorageKeys.USER_DATA).then((raw) => {
-      if (!raw) return;
-      try {
-        setUsuario(JSON.parse(raw) as Usuario);
-      } catch {
-        // datos corruptos, ignorar
-      }
-    });
-  }, []);
+  const { setIsAuthenticated, usuario, setUsuario } = useAuthContext();
 
   const loginMutation = useMutation({
     mutationFn: (payload: LoginPayload) => authService.login(payload),
@@ -31,27 +18,38 @@ export function useAuth() {
 
   const registerMutation = useMutation({
     mutationFn: (payload: RegisterPayload) => authService.register(payload),
+    // Sin onSuccess: no hace auto-login — el usuario debe iniciar sesión
+  });
+
+  const updatePerfilMutation = useMutation({
+    mutationFn: (payload: UpdatePerfilPayload) => authService.updatePerfil(payload),
     onSuccess: (data) => {
-      setUsuario(data.usuario);
-      setIsAuthenticated(true);
+      setUsuario(data.data);
     },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: (payload: CambiarPasswordPayload) => authService.changePassword(payload),
   });
 
   const logout = useCallback(async () => {
     await authService.logout();
     setUsuario(null);
     setIsAuthenticated(false);
-  }, [setIsAuthenticated]);
+  }, [setIsAuthenticated, setUsuario]);
 
   return {
     usuario,
     isAuthenticated: !!usuario,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
+    updatePerfil: updatePerfilMutation.mutateAsync,
+    changePassword: changePasswordMutation.mutateAsync,
     logout,
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
+    isUpdatingPerfil: updatePerfilMutation.isPending,
+    isChangingPassword: changePasswordMutation.isPending,
     loginError: loginMutation.error,
-    registerError: registerMutation.error,
   };
 }

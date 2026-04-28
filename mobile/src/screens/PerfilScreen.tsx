@@ -22,17 +22,73 @@ import type { MainStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Perfil'>;
 
-// ─── Centros de salud de referencia (MINSA) ───────────────────────────────────
-// En producción, esto debería consultarse desde un endpoint con PostGIS
+// ─── Centros de salud de referencia (MINSA / EsSalud) ────────────────────────
+// En producción se consultarán desde un endpoint con PostGIS
 
 const CENTROS_SALUD = [
-  { nombre: 'Hospital Nacional Dos de Mayo', telefono: '(01) 328-0032', direccion: 'Av. Grau 13, Cercado de Lima', maps: 'https://maps.google.com/?q=-12.054,-77.029' },
-  { nombre: 'Hospital Nacional Arzobispo Loayza', telefono: '(01) 613-6000', direccion: 'Av. Alfonso Ugarte 848, Cercado de Lima', maps: 'https://maps.google.com/?q=-12.048,-77.042' },
-  { nombre: 'Hospital Nacional Cayetano Heredia', telefono: '(01) 482-0400', direccion: 'Av. Honorio Delgado 262, SMP', maps: 'https://maps.google.com/?q=-12.014,-77.052' },
-  { nombre: 'Hospital María Auxiliadora', telefono: '(01) 217-8900', direccion: 'Av. Miguel Iglesias s/n, SJM', maps: 'https://maps.google.com/?q=-12.165,-76.975' },
-  { nombre: 'Hospital Sergio E. Bernales', telefono: '(01) 556-2040', direccion: 'Av. Túpac Amaru s/n, Comas', maps: 'https://maps.google.com/?q=-11.941,-77.041' },
-  { nombre: 'Hospital de Emergencias Grau (EsSalud)', telefono: '(01) 471-0840', direccion: 'Av. Grau 650, La Victoria', maps: 'https://maps.google.com/?q=-12.059,-77.026' },
+  {
+    nombre: 'Hospital Nacional Dos de Mayo',
+    telefono: '(01) 328-0032',
+    direccion: 'Av. Grau 13, Cercado de Lima',
+    lat: -12.0540,
+    lng: -77.0290,
+    maps: 'https://maps.google.com/?q=-12.054,-77.029',
+  },
+  {
+    nombre: 'Hospital Nacional Arzobispo Loayza',
+    telefono: '(01) 613-6000',
+    direccion: 'Av. Alfonso Ugarte 848, Cercado de Lima',
+    lat: -12.0480,
+    lng: -77.0420,
+    maps: 'https://maps.google.com/?q=-12.048,-77.042',
+  },
+  {
+    nombre: 'Hospital Nacional Cayetano Heredia',
+    telefono: '(01) 482-0400',
+    direccion: 'Av. Honorio Delgado 262, SMP',
+    lat: -12.0140,
+    lng: -77.0520,
+    maps: 'https://maps.google.com/?q=-12.014,-77.052',
+  },
+  {
+    nombre: 'Hospital María Auxiliadora',
+    telefono: '(01) 217-8900',
+    direccion: 'Av. Miguel Iglesias s/n, SJM',
+    lat: -12.1650,
+    lng: -76.9750,
+    maps: 'https://maps.google.com/?q=-12.165,-76.975',
+  },
+  {
+    nombre: 'Hospital Sergio E. Bernales',
+    telefono: '(01) 556-2040',
+    direccion: 'Av. Túpac Amaru s/n, Comas',
+    lat: -11.9410,
+    lng: -77.0410,
+    maps: 'https://maps.google.com/?q=-11.941,-77.041',
+  },
+  {
+    nombre: 'Hospital de Emergencias Grau (EsSalud)',
+    telefono: '(01) 471-0840',
+    direccion: 'Av. Grau 650, La Victoria',
+    lat: -12.0590,
+    lng: -77.0260,
+    maps: 'https://maps.google.com/?q=-12.059,-77.026',
+  },
 ];
+
+// Distancia en km usando fórmula haversine
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+type CentroConDistancia = typeof CENTROS_SALUD[0] & { distanciaKm: number };
 
 // ─── Componente de fila de ajuste ─────────────────────────────────────────────
 
@@ -62,15 +118,11 @@ function SettingRow({ icono, label, descripcion, colors, onPress, rightElement, 
       </View>
       <View style={styles.settingContent}>
         <Text style={[styles.settingLabel, { color: textColor }]}>{label}</Text>
-        {descripcion && (
-          <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
-            {descripcion}
-          </Text>
-        )}
+        {descripcion ? (
+          <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>{descripcion}</Text>
+        ) : null}
       </View>
-      {rightElement ?? (
-        onPress && <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
-      )}
+      {rightElement ?? (onPress ? <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} /> : null)}
     </TouchableOpacity>
   );
 }
@@ -78,19 +130,15 @@ function SettingRow({ icono, label, descripcion, colors, onPress, rightElement, 
 // ─── Pantalla principal ───────────────────────────────────────────────────────
 
 export default function PerfilScreen({ navigation }: Props) {
-  const { colors, mode, setThemeMode, isDark } = useTheme();
+  const { colors, mode, setThemeMode } = useTheme();
   const { usuario, logout } = useAuth();
   const insets = useSafeAreaInsets();
 
-  // Notificaciones
   const [notifAlertas, setNotifAlertas] = useState(true);
   const [notifEstado, setNotifEstado] = useState(true);
-
-  // Emergencia
   const [buscandoCentros, setBuscandoCentros] = useState(false);
-  const [centrosCercanos, setCentrosCercanos] = useState<typeof CENTROS_SALUD | null>(null);
+  const [centrosCercanos, setCentrosCercanos] = useState<CentroConDistancia[] | null>(null);
 
-  // Carga preferencias desde storage
   useEffect(() => {
     Promise.all([
       storage.getItem(StorageKeys.NOTIF_ALERTAS),
@@ -111,34 +159,50 @@ export default function PerfilScreen({ navigation }: Props) {
     storage.setItem(StorageKeys.NOTIF_ESTADO_REPORTE, String(val));
   };
 
-  const primerNombre = usuario?.nombre?.split(' ')[0] ?? 'Ciudadano';
   const iniciales = `${usuario?.nombre?.charAt(0) ?? '?'}${usuario?.apellido?.charAt(0) ?? ''}`.toUpperCase();
-
-  const ubicacion = [usuario?.distrito, usuario?.provincia, usuario?.departamento]
-    .filter(Boolean)
-    .join(', ');
+  const ubicacion = [usuario?.distrito, usuario?.provincia, usuario?.departamento].filter(Boolean).join(', ');
 
   const handleBuscarCentros = async () => {
     setBuscandoCentros(true);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso requerido', 'Necesitamos tu ubicación para encontrar centros cercanos.');
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Necesitamos tu ubicación para encontrar centros cercanos.');
+        return;
+      }
+
+      // Intenta la última posición conocida primero (respuesta inmediata)
+      let location = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
+
+      // Si no hay posición reciente, solicita una nueva con timeout de 8s
+      if (!location) {
+        location = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 8000),
+          ),
+        ]);
+      }
+
+      const { latitude, longitude } = location.coords;
+      const ordenados = [...CENTROS_SALUD]
+        .map((c) => ({ ...c, distanciaKm: haversineKm(latitude, longitude, c.lat, c.lng) }))
+        .sort((a, b) => a.distanciaKm - b.distanciaKm)
+        .slice(0, 3);
+
+      setCentrosCercanos(ordenados);
+    } catch (err: any) {
+      if (err?.message === 'timeout') {
+        Alert.alert(
+          'Sin señal GPS',
+          'No se pudo obtener tu ubicación a tiempo. Intenta de nuevo al aire libre.',
+        );
+      } else {
+        Alert.alert('Error', 'No se pudo determinar tu ubicación.');
+      }
+    } finally {
       setBuscandoCentros(false);
-      return;
     }
-    // En producción, aquí haría POST a /centros-salud/cercanos con lat/lng
-    // Por ahora mostramos los centros de referencia
-    await new Promise((r) => setTimeout(r, 800));
-    setCentrosCercanos(CENTROS_SALUD);
-    setBuscandoCentros(false);
-  };
-
-  const handleLlamarEmergencia = (numero: string) => {
-    Linking.openURL(`tel:${numero}`);
-  };
-
-  const handleAbrirMaps = (url: string) => {
-    Linking.openURL(url);
   };
 
   const handleCerrarSesion = () => {
@@ -147,18 +211,14 @@ export default function PerfilScreen({ navigation }: Props) {
       '¿Estás seguro de que quieres cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar sesión',
-          style: 'destructive',
-          onPress: logout,
-        },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: logout },
       ],
     );
   };
 
   const TEMA_OPCIONES: { label: string; value: 'light' | 'dark' | 'system'; icono: string }[] = [
-    { label: 'Claro', value: 'light', icono: 'sunny-outline' },
-    { label: 'Oscuro', value: 'dark', icono: 'moon-outline' },
+    { label: 'Claro',   value: 'light',  icono: 'sunny-outline'    },
+    { label: 'Oscuro',  value: 'dark',   icono: 'moon-outline'     },
     { label: 'Sistema', value: 'system', icono: 'contrast-outline' },
   ];
 
@@ -171,13 +231,13 @@ export default function PerfilScreen({ navigation }: Props) {
       ]}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Encabezado con botón volver ── */}
+      {/* Encabezado */}
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Ionicons name="arrow-back-outline" size={20} color={colors.primary} />
         <Text style={[styles.backText, { color: colors.primary }]}>Inicio</Text>
       </TouchableOpacity>
 
-      {/* ── Avatar y datos del usuario ── */}
+      {/* Avatar y datos */}
       <View style={[styles.profileHeader, { backgroundColor: colors.surface }]}>
         <View style={[styles.avatarLarge, { backgroundColor: colors.primarySubtle, borderColor: colors.primary }]}>
           <Text style={[styles.avatarText, { color: colors.primary }]}>{iniciales}</Text>
@@ -192,9 +252,7 @@ export default function PerfilScreen({ navigation }: Props) {
           {ubicacion ? (
             <View style={styles.ubicacionRow}>
               <Ionicons name="location-outline" size={12} color={colors.textSecondary} />
-              <Text style={[styles.ubicacionText, { color: colors.textSecondary }]}>
-                {ubicacion}
-              </Text>
+              <Text style={[styles.ubicacionText, { color: colors.textSecondary }]}>{ubicacion}</Text>
             </View>
           ) : null}
           <View style={[styles.rolBadge, { backgroundColor: colors.primarySubtle }]}>
@@ -205,7 +263,7 @@ export default function PerfilScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* ── Notificaciones ── */}
+      {/* Notificaciones */}
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Notificaciones</Text>
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <SettingRow
@@ -239,7 +297,7 @@ export default function PerfilScreen({ navigation }: Props) {
         />
       </View>
 
-      {/* ── Apariencia ── */}
+      {/* Apariencia */}
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Apariencia</Text>
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <View style={styles.temaRow}>
@@ -277,7 +335,7 @@ export default function PerfilScreen({ navigation }: Props) {
         </View>
       </View>
 
-      {/* ── Cuenta y seguridad ── */}
+      {/* Cuenta y seguridad */}
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Cuenta y seguridad</Text>
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
         <SettingRow
@@ -285,18 +343,14 @@ export default function PerfilScreen({ navigation }: Props) {
           label="Editar perfil"
           descripcion="Nombre, teléfono y ubicación"
           colors={colors}
-          onPress={() =>
-            Alert.alert('Próximamente', 'La edición de perfil estará disponible en la siguiente versión.')
-          }
+          onPress={() => navigation.navigate('EditarPerfil')}
         />
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <SettingRow
           icono="lock-closed-outline"
           label="Cambiar contraseña"
           colors={colors}
-          onPress={() =>
-            Alert.alert('Próximamente', 'El cambio de contraseña estará disponible en la siguiente versión.')
-          }
+          onPress={() => navigation.navigate('CambiarPassword')}
         />
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <SettingRow
@@ -308,77 +362,38 @@ export default function PerfilScreen({ navigation }: Props) {
         />
       </View>
 
-      {/* ── Emergencia ── */}
+      {/* Emergencia */}
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Emergencia</Text>
-
-      {/* Líneas de emergencia nacionales */}
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
-        <TouchableOpacity
-          style={styles.emergenciaLlamada}
-          onPress={() => handleLlamarEmergencia('117')}
-        >
-          <View style={[styles.emergenciaIconBox, { backgroundColor: '#FFF3F3' }]}>
-            <Ionicons name="medical-outline" size={22} color={colors.error} />
-          </View>
-          <View style={styles.emergenciaTextos}>
-            <Text style={[styles.emergenciaLabel, { color: colors.text }]}>
-              MINSA — Salud en Línea
-            </Text>
-            <Text style={[styles.emergenciaNumero, { color: colors.error }]}>117</Text>
-          </View>
-          <View style={[styles.llamarBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="call" size={16} color="#FFFFFF" />
-            <Text style={styles.llamarText}>Llamar</Text>
-          </View>
-        </TouchableOpacity>
-
-        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-
-        <TouchableOpacity
-          style={styles.emergenciaLlamada}
-          onPress={() => handleLlamarEmergencia('106')}
-        >
-          <View style={[styles.emergenciaIconBox, { backgroundColor: '#FFF3F3' }]}>
-            <Ionicons name="car-outline" size={22} color={colors.error} />
-          </View>
-          <View style={styles.emergenciaTextos}>
-            <Text style={[styles.emergenciaLabel, { color: colors.text }]}>
-              SAMU — Emergencias Médicas
-            </Text>
-            <Text style={[styles.emergenciaNumero, { color: colors.error }]}>106</Text>
-          </View>
-          <View style={[styles.llamarBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="call" size={16} color="#FFFFFF" />
-            <Text style={styles.llamarText}>Llamar</Text>
-          </View>
-        </TouchableOpacity>
-
-        <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-
-        <TouchableOpacity
-          style={styles.emergenciaLlamada}
-          onPress={() => handleLlamarEmergencia('113')}
-        >
-          <View style={[styles.emergenciaIconBox, { backgroundColor: '#FFF3F3' }]}>
-            <Ionicons name="shield-outline" size={22} color={colors.error} />
-          </View>
-          <View style={styles.emergenciaTextos}>
-            <Text style={[styles.emergenciaLabel, { color: colors.text }]}>
-              Central de Emergencias
-            </Text>
-            <Text style={[styles.emergenciaNumero, { color: colors.error }]}>113</Text>
-          </View>
-          <View style={[styles.llamarBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="call" size={16} color="#FFFFFF" />
-            <Text style={styles.llamarText}>Llamar</Text>
-          </View>
-        </TouchableOpacity>
+        {[
+          { label: 'MINSA — Salud en Línea',       numero: '117', icono: 'medical-outline' },
+          { label: 'SAMU — Emergencias Médicas',   numero: '106', icono: 'car-outline'     },
+          { label: 'Central de Emergencias',        numero: '113', icono: 'shield-outline'  },
+        ].map(({ label, numero, icono }, idx) => (
+          <React.Fragment key={numero}>
+            {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.divider }]} />}
+            <TouchableOpacity
+              style={styles.emergenciaLlamada}
+              onPress={() => Linking.openURL(`tel:${numero}`)}
+            >
+              <View style={[styles.emergenciaIconBox, { backgroundColor: '#FFF3F3' }]}>
+                <Ionicons name={icono as any} size={22} color={colors.error} />
+              </View>
+              <View style={styles.emergenciaTextos}>
+                <Text style={[styles.emergenciaLabel, { color: colors.text }]}>{label}</Text>
+                <Text style={[styles.emergenciaNumero, { color: colors.error }]}>{numero}</Text>
+              </View>
+              <View style={[styles.llamarBtn, { backgroundColor: colors.error }]}>
+                <Ionicons name="call" size={16} color="#FFFFFF" />
+                <Text style={styles.llamarText}>Llamar</Text>
+              </View>
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
       </View>
 
       {/* Centros de salud cercanos */}
-      <Text style={[styles.subsectionTitle, { color: colors.text }]}>
-        Centros de salud cercanos
-      </Text>
+      <Text style={[styles.subsectionTitle, { color: colors.text }]}>Centros de salud cercanos</Text>
 
       {!centrosCercanos ? (
         <TouchableOpacity
@@ -392,7 +407,7 @@ export default function PerfilScreen({ navigation }: Props) {
             <Ionicons name="location-outline" size={18} color="#FFFFFF" />
           )}
           <Text style={styles.buscarBtnText}>
-            {buscandoCentros ? 'Buscando...' : 'Encontrar centros cercanos'}
+            {buscandoCentros ? 'Buscando...' : 'Encontrar los 3 más cercanos'}
           </Text>
         </TouchableOpacity>
       ) : (
@@ -405,16 +420,25 @@ export default function PerfilScreen({ navigation }: Props) {
                   <Ionicons name="business-outline" size={18} color={colors.primary} />
                 </View>
                 <View style={styles.centroContent}>
-                  <Text style={[styles.centroNombre, { color: colors.text }]} numberOfLines={2}>
-                    {centro.nombre}
-                  </Text>
+                  <View style={styles.centroTopRow}>
+                    <Text style={[styles.centroNombre, { color: colors.text }]} numberOfLines={2}>
+                      {centro.nombre}
+                    </Text>
+                    <View style={[styles.distanciaBadge, { backgroundColor: colors.primarySubtle }]}>
+                      <Text style={[styles.distanciaText, { color: colors.primary }]}>
+                        {centro.distanciaKm < 1
+                          ? `${Math.round(centro.distanciaKm * 1000)} m`
+                          : `${centro.distanciaKm.toFixed(1)} km`}
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={[styles.centroDireccion, { color: colors.textSecondary }]}>
                     {centro.direccion}
                   </Text>
                   <View style={styles.centroAcciones}>
                     <TouchableOpacity
                       style={[styles.centroBtn, { borderColor: colors.primary }]}
-                      onPress={() => handleLlamarEmergencia(centro.telefono.replace(/[^0-9]/g, ''))}
+                      onPress={() => Linking.openURL(`tel:${centro.telefono.replace(/[^0-9]/g, '')}`)}
                     >
                       <Ionicons name="call-outline" size={12} color={colors.primary} />
                       <Text style={[styles.centroBtnText, { color: colors.primary }]}>
@@ -423,12 +447,10 @@ export default function PerfilScreen({ navigation }: Props) {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.centroBtn, { borderColor: colors.primary }]}
-                      onPress={() => handleAbrirMaps(centro.maps)}
+                      onPress={() => Linking.openURL(centro.maps)}
                     >
                       <Ionicons name="map-outline" size={12} color={colors.primary} />
-                      <Text style={[styles.centroBtnText, { color: colors.primary }]}>
-                        Ver en mapa
-                      </Text>
+                      <Text style={[styles.centroBtnText, { color: colors.primary }]}>Ver en mapa</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -438,7 +460,6 @@ export default function PerfilScreen({ navigation }: Props) {
         </View>
       )}
 
-      {/* ── Versión ── */}
       <Text style={[styles.version, { color: colors.textDisabled }]}>
         SIVAPRE v1.0.0 — Sistema de Vigilancia Preventiva
       </Text>
@@ -458,12 +479,8 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 20,
   },
-  backText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-  },
+  backText: { fontFamily: 'Inter-Regular', fontSize: 14 },
 
-  // Header de perfil
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -485,28 +502,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 24,
-  },
+  avatarText: { fontFamily: 'Montserrat-ExtraBold', fontSize: 24 },
   profileInfo: { flex: 1, gap: 4 },
-  profileName: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 16,
-  },
-  profileEmail: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
-  },
-  ubicacionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ubicacionText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-  },
+  profileName: { fontFamily: 'Montserrat-ExtraBold', fontSize: 16 },
+  profileEmail: { fontFamily: 'Inter-Regular', fontSize: 13 },
+  ubicacionRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  ubicacionText: { fontFamily: 'Inter-Regular', fontSize: 12 },
   rolBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
@@ -514,12 +515,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 4,
   },
-  rolText: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 11,
-  },
+  rolText: { fontFamily: 'Montserrat-ExtraBold', fontSize: 11 },
 
-  // Secciones
   sectionTitle: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 14,
@@ -533,7 +530,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 
-  // Card genérico
   card: {
     borderRadius: 14,
     marginBottom: 20,
@@ -544,12 +540,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  divider: {
-    height: 1,
-    marginLeft: 56,
-  },
+  divider: { height: 1, marginLeft: 56 },
 
-  // Fila de ajuste
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -564,22 +556,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   settingContent: { flex: 1 },
-  settingLabel: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 13,
-  },
-  settingDesc: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 11,
-    marginTop: 2,
-  },
+  settingLabel: { fontFamily: 'Montserrat-ExtraBold', fontSize: 13 },
+  settingDesc: { fontFamily: 'Inter-Regular', fontSize: 11, marginTop: 2 },
 
-  // Selector de tema
-  temaRow: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 14,
-  },
+  temaRow: { flexDirection: 'row', gap: 8, padding: 14 },
   temaChip: {
     flex: 1,
     flexDirection: 'row',
@@ -590,12 +570,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1.5,
   },
-  temaText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-  },
+  temaText: { fontFamily: 'Inter-Regular', fontSize: 12 },
 
-  // Emergencia — llamadas
   emergenciaLlamada: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -610,14 +586,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emergenciaTextos: { flex: 1 },
-  emergenciaLabel: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 12,
-  },
-  emergenciaNumero: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 20,
-  },
+  emergenciaLabel: { fontFamily: 'Montserrat-ExtraBold', fontSize: 12 },
+  emergenciaNumero: { fontFamily: 'Montserrat-ExtraBold', fontSize: 20 },
   llamarBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -626,13 +596,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
   },
-  llamarText: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 12,
-    color: '#FFFFFF',
-  },
+  llamarText: { fontFamily: 'Montserrat-ExtraBold', fontSize: 12, color: '#FFFFFF' },
 
-  // Botón buscar centros
   buscarBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -642,19 +607,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginBottom: 20,
   },
-  buscarBtnText: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
+  buscarBtnText: { fontFamily: 'Montserrat-ExtraBold', fontSize: 14, color: '#FFFFFF' },
 
-  // Centros de salud
-  centroRow: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 14,
-    alignItems: 'flex-start',
-  },
+  centroRow: { flexDirection: 'row', gap: 12, padding: 14, alignItems: 'flex-start' },
   centroIconBox: {
     width: 36,
     height: 36,
@@ -664,21 +619,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   centroContent: { flex: 1, gap: 4 },
-  centroNombre: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  centroDireccion: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 11,
-  },
-  centroAcciones: {
+  centroTopRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     gap: 8,
-    marginTop: 6,
-    flexWrap: 'wrap',
   },
+  centroNombre: { fontFamily: 'Montserrat-ExtraBold', fontSize: 12, lineHeight: 18, flex: 1 },
+  distanciaBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  distanciaText: { fontFamily: 'Montserrat-ExtraBold', fontSize: 11 },
+  centroDireccion: { fontFamily: 'Inter-Regular', fontSize: 11 },
+  centroAcciones: { flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' },
   centroBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -688,10 +639,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1.5,
   },
-  centroBtnText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 11,
-  },
+  centroBtnText: { fontFamily: 'Inter-Regular', fontSize: 11 },
 
   version: {
     fontFamily: 'Inter-Regular',

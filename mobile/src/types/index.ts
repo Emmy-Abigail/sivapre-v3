@@ -41,6 +41,20 @@ export interface AuthResponse {
   usuario: Usuario;
 }
 
+export interface UpdatePerfilPayload {
+  nombre?: string;
+  apellido?: string;
+  telefono?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
+}
+
+export interface CambiarPasswordPayload {
+  password_actual: string;
+  password_nuevo: string;
+}
+
 // ─── Reportes ────────────────────────────────────────────────────────────────
 
 export type EstadoReporte = 'enviado' | 'en_revision' | 'resuelto' | 'rechazado';
@@ -109,7 +123,7 @@ export type RootStackParamList = {
 
 export type AuthStackParamList = {
   Welcome: undefined;
-  Login: undefined;
+  Login: { successMessage?: string } | undefined;
   Register: undefined;
 };
 
@@ -124,4 +138,6 @@ export type MainStackParamList = {
   Tabs: undefined;
   ReporteDetalle: { id: string };
   Perfil: undefined;
+  EditarPerfil: undefined;
+  CambiarPassword: undefined;
 };

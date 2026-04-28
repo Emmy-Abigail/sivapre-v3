@@ -19,6 +19,8 @@ import MyReportsScreen from '../screens/MyReportsScreen';
 import InfoScreen from '../screens/InfoScreen';
 import ReporteDetalleScreen from '../screens/ReporteDetalleScreen';
 import PerfilScreen from '../screens/PerfilScreen';
+import EditarPerfilScreen from '../screens/EditarPerfilScreen';
+import CambiarPasswordScreen from '../screens/CambiarPasswordScreen';
 import type { MainStackParamList } from '../types';
 
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -169,6 +171,16 @@ function MainNavigator() {
       <MainStack.Screen
         name="Perfil"
         component={PerfilScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MainStack.Screen
+        name="EditarPerfil"
+        component={EditarPerfilScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <MainStack.Screen
+        name="CambiarPassword"
+        component={CambiarPasswordScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </MainStack.Navigator>

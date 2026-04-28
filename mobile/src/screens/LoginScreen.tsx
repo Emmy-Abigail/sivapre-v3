@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -17,26 +18,44 @@ import type { AuthStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
-  const { login, isLoggingIn, loginError } = useAuth();
+  const { login, isLoggingIn } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mostrarPassword, setMostrarPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const successMessage = route?.params?.successMessage;
 
   const handleLogin = async () => {
-    if (!email || !password) return;
-    await login({ email: email.trim(), password });
+    Keyboard.dismiss();
+    if (!email.trim() || !password) return;
+    setErrorMsg('');
+    try {
+      await login({ email: email.trim().toLowerCase(), password });
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.detail ??
+        err?.response?.data?.mensaje ??
+        err?.message ??
+        'Credenciales incorrectas. Intenta de nuevo.';
+      setErrorMsg(msg);
+    }
   };
 
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}
     >
-      <ScrollView contentContainerStyle={styles.container}>
-
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Botón volver */}
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back-outline" size={18} color={colors.textSecondary} />
@@ -49,63 +68,59 @@ export default function LoginScreen({ navigation }: Props) {
           Bienvenido de nuevo
         </Text>
 
-        {/* Banner de error */}
-        {loginError && (
-          <View style={[styles.errorBanner, { backgroundColor: colors.errorLight }]}>
-            <Text style={[styles.errorText, { color: colors.error }]}>
-              Credenciales incorrectas. Intenta de nuevo.
-            </Text>
+        {/* Banner de éxito tras registro */}
+        {successMessage ? (
+          <View style={[styles.successBanner, { backgroundColor: colors.successLight }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={colors.success} />
+            <Text style={[styles.successText, { color: colors.success }]}>{successMessage}</Text>
           </View>
-        )}
+        ) : null}
+
+        {/* Banner de error */}
+        {errorMsg ? (
+          <View style={[styles.errorBanner, { backgroundColor: colors.errorLight }]}>
+            <Ionicons name="alert-circle-outline" size={16} color={colors.error} />
+            <Text style={[styles.errorText, { color: colors.error }]}>{errorMsg}</Text>
+          </View>
+        ) : null}
 
         {/* Formulario */}
         <View style={styles.form}>
-
-          {/* Email */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Correo electrónico
-            </Text>
+            <Text style={[styles.label, { color: colors.text }]}>Correo electrónico</Text>
             <TextInput
               style={[
                 styles.input,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  color: colors.text,
-                },
+                { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
               ]}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => { setEmail(t); setErrorMsg(''); }}
               placeholder="tu@correo.com"
               placeholderTextColor={colors.textDisabled}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="next"
             />
           </View>
 
-          {/* Contraseña */}
           <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.text }]}>
-              Contraseña
-            </Text>
+            <Text style={[styles.label, { color: colors.text }]}>Contraseña</Text>
             <View
               style={[
                 styles.inputWrapper,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
+                { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
               <TextInput
                 style={[styles.inputWithIcon, { color: colors.text }]}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(t) => { setPassword(t); setErrorMsg(''); }}
                 placeholder="••••••••"
                 placeholderTextColor={colors.textDisabled}
                 secureTextEntry={!mostrarPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
@@ -120,23 +135,22 @@ export default function LoginScreen({ navigation }: Props) {
             </View>
           </View>
 
-          {/* Olvidé contraseña */}
           <TouchableOpacity>
             <Text style={[styles.forgot, { color: colors.primary }]}>
               ¿Olvidaste tu contraseña?
             </Text>
           </TouchableOpacity>
-
         </View>
 
         {/* Botón principal */}
         <TouchableOpacity
           style={[
             styles.buttonPrimary,
-            { backgroundColor: colors.primary, opacity: isLoggingIn ? 0.7 : 1 },
+            { backgroundColor: colors.primary },
+            (!email.trim() || !password || isLoggingIn) && styles.btnDisabled,
           ]}
           onPress={handleLogin}
-          disabled={isLoggingIn}
+          disabled={!email.trim() || !password || isLoggingIn}
         >
           <Text style={[styles.buttonPrimaryText, { color: colors.textOnPrimary }]}>
             {isLoggingIn ? 'CARGANDO...' : 'INICIAR SESIÓN'}
@@ -149,12 +163,9 @@ export default function LoginScreen({ navigation }: Props) {
             ¿No tienes cuenta?{' '}
           </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={[styles.registerLink, { color: colors.primary }]}>
-              Crear cuenta
-            </Text>
+            <Text style={[styles.registerLink, { color: colors.primary }]}>Crear cuenta</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -186,16 +197,33 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
-    marginBottom: 32,
+    marginBottom: 20,
   },
-  errorBanner: {
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     padding: 12,
     borderRadius: 10,
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  successText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    flex: 1,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
   },
   errorText: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
+    flex: 1,
   },
   form: {
     gap: 20,
@@ -244,6 +272,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 28,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   buttonPrimaryText: {
     fontFamily: 'Montserrat-ExtraBold',
