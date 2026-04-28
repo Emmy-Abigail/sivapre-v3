@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -108,41 +107,38 @@ function UbigeoSelector({
       </View>
 
       {open && !disabled && filtradas.length > 0 && (
-        <View
+        <ScrollView
           style={[
             stylesU.dropdown,
             { backgroundColor: colors.surface, borderColor: colors.border },
           ]}
+          keyboardShouldPersistTaps="always"
+          nestedScrollEnabled
         >
-          <FlatList
-            data={filtradas.slice(0, 8)}
-            keyExtractor={(item) => item}
-            keyboardShouldPersistTaps="always"
-            nestedScrollEnabled
-            renderItem={({ item }) => (
-              <TouchableOpacity
+          {filtradas.slice(0, 8).map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[
+                stylesU.option,
+                item === value && { backgroundColor: colors.primarySubtle },
+              ]}
+              onPress={() => handleSelect(item)}
+            >
+              <Text
                 style={[
-                  stylesU.option,
-                  item === value && { backgroundColor: colors.primarySubtle },
+                  stylesU.optionText,
+                  { color: item === value ? colors.primary : colors.text },
+                  item === value && { fontFamily: 'Montserrat-ExtraBold' },
                 ]}
-                onPress={() => handleSelect(item)}
               >
-                <Text
-                  style={[
-                    stylesU.optionText,
-                    { color: item === value ? colors.primary : colors.text },
-                    item === value && { fontFamily: 'Montserrat-ExtraBold' },
-                  ]}
-                >
-                  {item}
-                </Text>
-                {item === value && (
-                  <Ionicons name="checkmark" size={14} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            )}
-          />
-        </View>
+                {item}
+              </Text>
+              {item === value && (
+                <Ionicons name="checkmark" size={14} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       )}
     </View>
   );
