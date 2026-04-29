@@ -112,7 +112,7 @@ function TabNavigator() {
           tabBarLabel: ({ focused }) => (
             <Text
               style={[
-                styles.tabLabel,
+                focused ? styles.tabLabelActive : styles.tabLabel,
                 { color: focused ? colors.primary : colors.textSecondary },
               ]}
             >
@@ -215,8 +215,13 @@ export default function RootNavigator() {
 
 const styles = StyleSheet.create({
   tabLabel: {
+    fontFamily: 'Inter-Regular',
     fontSize: 10,
-    fontWeight: '500',
+    marginTop: 2,
+  },
+  tabLabelActive: {
+    fontFamily: 'Montserrat-ExtraBold',
+    fontSize: 10,
     marginTop: 2,
   },
   reportTabItem: {
