@@ -38,9 +38,12 @@ export function useAuth() {
   });
 
   const logout = useCallback(async () => {
-    await authService.logout();
-    setUsuario(null);
-    setIsAuthenticated(false);
+    try {
+      await authService.logout();
+    } finally {
+      setUsuario(null);
+      setIsAuthenticated(false);
+    }
   }, [setIsAuthenticated]);
 
   return {

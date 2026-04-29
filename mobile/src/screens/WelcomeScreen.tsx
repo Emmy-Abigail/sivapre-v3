@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import type { AuthStackParamList } from '../types';
@@ -18,8 +18,13 @@ export default function WelcomeScreen({ navigation }: Props) {
         <Text style={[styles.logoAccent, { color: colors.primaryLight }]}>.</Text>
       </View>
 
-      {/* Centro — bienvenida y subtítulo */}
+      {/* Centro — bienvenida con logo de fondo */}
       <View style={styles.middle}>
+        <Image
+          source={require('../../assets/upch-logo.png')}
+          style={styles.watermarkLogo}
+          resizeMode="contain"
+        />
         <Text style={[styles.title, { color: colors.text }]}>¡BIENVENIDO!</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Tu reporte puede salvar vidas.{'\n'}
@@ -76,6 +81,16 @@ const styles = StyleSheet.create({
   },
   middle: {
     alignItems: 'center',
+    position: 'relative',
+  },
+  watermarkLogo: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    opacity: 0.07,
+    alignSelf: 'center',
+    top: '50%',
+    marginTop: -130,
   },
   title: {
     fontSize: 26,

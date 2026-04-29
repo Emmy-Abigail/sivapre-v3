@@ -105,9 +105,9 @@ export default function HomeScreen({ navigation }: Props) {
   // Cuando haya un endpoint dedicado de estadísticas, reemplazar estos cálculos
   const reportesEnviados = data?.total ?? 0;
   const reportesVerificados =
-    data?.data?.filter((r) => r.estado === 'en_revision').length ?? 0;
+    data?.items?.filter((r) => r.estado === 'en_revision').length ?? 0;
   const reportesResueltos =
-    data?.data?.filter((r) => r.estado === 'resuelto').length ?? 0;
+    data?.items?.filter((r) => r.estado === 'resuelto').length ?? 0;
 
   return (
     <ScrollView

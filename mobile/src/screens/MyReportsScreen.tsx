@@ -104,7 +104,7 @@ export default function MyReportsScreen({ navigation }: Props) {
   const { data, isLoading, refetch, isRefetching } = useMisReportes();
   const [filtroActivo, setFiltroActivo] = useState<Filtro>('Todos');
 
-  const reportes = data?.data ?? [];
+  const reportes = data?.items ?? [];
 
   const reportesFiltrados = filtroActivo === 'Todos'
     ? reportes

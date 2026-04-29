@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -50,6 +51,15 @@ export default function LoginScreen({ navigation }: Props) {
           <Ionicons name="arrow-back-outline" size={18} color={neonCyan} />
           <Text style={[styles.backText, { color: neonCyan }]}>VOLVER</Text>
         </TouchableOpacity>
+
+        {/* Logo UPCH neón */}
+        <View style={styles.logoWrapper}>
+          <Image
+            source={require('../../assets/upch-logo.png')}
+            style={styles.upchLogo}
+            resizeMode="contain"
+          />
+        </View>
 
         {/* Encabezado Cyberpunk */}
         <View style={styles.headerContainer}>
@@ -314,5 +324,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 11,
     letterSpacing: 1,
+  },
+  logoWrapper: {
+    alignSelf: 'flex-start',
+    marginBottom: 24,
+    shadowColor: '#22d3ee',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  upchLogo: {
+    width: 60,
+    height: 80,
+    opacity: 0.55,
   },
 });
