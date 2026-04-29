@@ -1,32 +1,47 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { useAuthContext } from '../store/auth-context';
+import { SivapreLogo } from '../components';
+
+const ICON_SIZE = Math.min(Dimensions.get('window').width * 0.44, 210);
 
 export default function SplashScreen() {
   const { setSplashShown } = useAuthContext();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(24)).current;
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(28)).current;
+  const barAnim   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 900,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 900,
+        duration: 800,
         useNativeDriver: true,
       }),
     ]).start();
 
-    const timer = setTimeout(() => {
-      setSplashShown(true);
-    }, 2500);
+    // Barra de progreso animada (no usa native driver por ser width %)
+    Animated.timing(barAnim, {
+      toValue: 1,
+      duration: 1800,
+      delay: 400,
+      useNativeDriver: false,
+    }).start();
 
+    const timer = setTimeout(() => setSplashShown(true), 2700);
     return () => clearTimeout(timer);
   }, []);
+
+  const barWidth = barAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
     <View style={styles.container}>
@@ -36,18 +51,24 @@ export default function SplashScreen() {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
-        <View style={styles.logoRow}>
-          <Text style={styles.logo}>SIVAPRE</Text>
-          <Text style={styles.logoAccent}>.</Text>
-        </View>
+        {/* Ícono vectorial */}
+        <SivapreLogo size={ICON_SIZE} />
 
+        {/* Nombre */}
+        <Text style={styles.appName}>SIVAPRE</Text>
+
+        {/* Tagline */}
         <Text style={styles.tagline}>
-          Vigilancia Participativa{'\n'}contra el Dengue
+          VIGILANCIA PARTICIPATIVA{'\n'}CONTRA EL DENGUE
         </Text>
 
-        <View style={styles.divider} />
+        {/* Barra de progreso */}
+        <View style={styles.barTrack}>
+          <Animated.View style={[styles.barFill, { width: barWidth }]} />
+        </View>
       </Animated.View>
 
+      {/* Versión fijada al fondo */}
       <Animated.Text style={[styles.version, { opacity: fadeAnim }]}>
         v1.0
       </Animated.Text>
@@ -61,49 +82,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F6E56',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 40,
   },
   content: {
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 16,
-  },
-  logo: {
+  appName: {
     fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 42,
-    letterSpacing: 6,
+    fontSize: 38,
+    letterSpacing: 8,
     color: '#FFFFFF',
-  },
-  logoAccent: {
-    fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 54,
-    lineHeight: 54,
-    marginBottom: 0,
-    color: '#7EDFC0',
+    marginTop: 24,
+    marginBottom: 12,
   },
   tagline: {
     fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    letterSpacing: 2,
+    fontSize: 12,
+    letterSpacing: 2.5,
     textAlign: 'center',
-    lineHeight: 22,
-    textTransform: 'uppercase',
-    color: 'rgba(255, 255, 255, 0.75)',
-    marginBottom: 32,
+    lineHeight: 20,
+    color: 'rgba(255, 255, 255, 0.70)',
+    marginBottom: 36,
   },
-  divider: {
-    width: 40,
+  barTrack: {
+    width: 120,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+  },
+  barFill: {
     height: 3,
     borderRadius: 2,
     backgroundColor: '#7EDFC0',
-    opacity: 0.5,
   },
   version: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 44,
     fontFamily: 'Inter-Regular',
     fontSize: 11,
     letterSpacing: 1,
