@@ -18,8 +18,11 @@ export default function WelcomeScreen({ navigation }: Props) {
         <Text style={[styles.logoAccent, { color: colors.primaryLight }]}>.</Text>
       </View>
 
-      {/* Centro — bienvenida con logo de fondo */}
+      {/* Centro — bienvenida con escudo de fondo */}
       <View style={styles.middle}>
+        {/* Halo neón detrás del escudo */}
+        <View style={[styles.neonOrb, { shadowColor: colors.primary }]} />
+        {/* Escudo UPCH como marca de agua */}
         <Image
           source={require('../../assets/upch-logo.png')}
           style={styles.watermarkLogo}
@@ -81,16 +84,26 @@ const styles = StyleSheet.create({
   },
   middle: {
     alignItems: 'center',
-    position: 'relative',
+    paddingVertical: 48,
   },
-  watermarkLogo: {
+  neonOrb: {
     position: 'absolute',
     width: 260,
     height: 260,
-    opacity: 0.07,
-    alignSelf: 'center',
-    top: '50%',
-    marginTop: -130,
+    borderRadius: 130,
+    backgroundColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 60,
+    elevation: 0,
+  },
+  watermarkLogo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0.1,
   },
   title: {
     fontSize: 26,
