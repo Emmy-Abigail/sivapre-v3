@@ -55,6 +55,25 @@ export interface CambiarPasswordPayload {
   password_nuevo: string;
 }
 
+// ─── Alertas por zona ────────────────────────────────────────────────────────
+
+export type NivelAlerta = 'Alto' | 'Medio' | 'Bajo';
+
+export interface AlertaZona {
+  zona: string;
+  departamento: string;
+  provincia: string;
+  nivel: NivelAlerta;
+  descripcion: string;
+  total_reportes: number;
+  es_mi_zona: boolean;
+}
+
+export interface AlertasZonaResponse {
+  alertas: AlertaZona[];
+  tiene_zona: boolean;
+}
+
 // ─── Reportes ────────────────────────────────────────────────────────────────
 
 export type EstadoReporte = 'enviado' | 'en_revision' | 'resuelto' | 'rechazado';

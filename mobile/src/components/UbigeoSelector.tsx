@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,13 +31,15 @@ export default function UbigeoSelector({
 }: Props) {
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
 
-  const filtradas = query.length > 0
+  // Solo muestra resultados que coinciden con lo escrito
+  const filtradas = query.trim().length > 0
     ? opciones.filter((o) => {
         const q = query.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         return o.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q);
       })
-    : opciones;
+    : [];
 
   const handleSelect = (opcion: string) => {
     setQuery(opcion);
@@ -48,13 +50,34 @@ export default function UbigeoSelector({
   const handleChangeText = (text: string) => {
     setQuery(text);
     if (text !== value) onChange('');
-    setOpen(true);
+    // El dropdown aparece solo cuando hay texto; si borra todo, se cierra
+    setOpen(text.trim().length > 0);
   };
 
-  // Sincroniza el texto visible cuando value cambia desde afuera (e.g. reset)
-  React.useEffect(() => {
-    if (!value && query) setQuery('');
+  const handleClear = () => {
+    setQuery('');
+    onChange('');
+    setOpen(false);
+  };
+
+  const handleFocus = () => {
+    setFocused(true);
+    // No abre el dropdown al hacer tap: espera a que el usuario escriba
+  };
+
+  const handleBlur = () => {
+    setFocused(false);
+    setTimeout(() => setOpen(false), 150);
+  };
+
+  // Sincroniza el texto visible cuando value se resetea desde afuera
+  useEffect(() => {
+    if (!value) setQuery('');
   }, [value]);
+
+  const borderColor = focused ? colors.primary : colors.border;
+  const showDropdown = open && !disabled && filtradas.length > 0;
+  const sinResultados = open && !disabled && query.trim().length > 0 && filtradas.length === 0;
 
   return (
     <View style={styles.wrapper}>
@@ -65,7 +88,7 @@ export default function UbigeoSelector({
           styles.inputRow,
           {
             backgroundColor: disabled ? colors.surfaceVariant : colors.surface,
-            borderColor: open ? colors.primary : colors.border,
+            borderColor,
           },
         ]}
       >
@@ -76,28 +99,32 @@ export default function UbigeoSelector({
           placeholder={disabled ? 'Selecciona el campo anterior primero' : placeholder}
           placeholderTextColor={colors.textDisabled}
           editable={!disabled}
-          onFocus={() => { if (!disabled) setOpen(true); }}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           autoCorrect={false}
           autoCapitalize="words"
+          returnKeyType="done"
         />
-        {query.length > 0 && !disabled && (
-          <TouchableOpacity
-            onPress={() => { setQuery(''); onChange(''); setOpen(true); }}
-            style={styles.clearBtn}
-          >
+        {query.length > 0 && !disabled ? (
+          <TouchableOpacity onPress={handleClear} style={styles.clearBtn} hitSlop={8}>
             <Ionicons name="close-circle" size={16} color={colors.textDisabled} />
           </TouchableOpacity>
+        ) : null}
+        {/* Indicador de estado: check si hay valor seleccionado, flecha si está interactuando */}
+        {value ? (
+          <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.statusIcon} />
+        ) : (
+          <Ionicons
+            name={focused ? 'search-outline' : 'chevron-down'}
+            size={16}
+            color={disabled ? colors.textDisabled : colors.textSecondary}
+            style={styles.statusIcon}
+          />
         )}
-        <Ionicons
-          name={open ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color={disabled ? colors.textDisabled : colors.textSecondary}
-          style={{ marginRight: 10 }}
-        />
       </View>
 
-      {open && !disabled && filtradas.length > 0 && (
+      {/* Dropdown — solo aparece cuando hay texto escrito y hay coincidencias */}
+      {showDropdown && (
         <View
           style={[
             styles.dropdown,
@@ -108,6 +135,7 @@ export default function UbigeoSelector({
             keyboardShouldPersistTaps="always"
             nestedScrollEnabled
             style={{ maxHeight: 200 }}
+            showsVerticalScrollIndicator={false}
           >
             {filtradas.slice(0, 8).map((item) => (
               <TouchableOpacity
@@ -133,6 +161,22 @@ export default function UbigeoSelector({
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+      )}
+
+      {/* Mensaje cuando no hay coincidencias */}
+      {sinResultados && (
+        <View
+          style={[
+            styles.dropdown,
+            styles.dropdownEmpty,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          <Ionicons name="search-outline" size={14} color={colors.textDisabled} />
+          <Text style={[styles.emptyText, { color: colors.textDisabled }]}>
+            Sin coincidencias para "{query}"
+          </Text>
         </View>
       )}
     </View>
@@ -166,6 +210,9 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 6,
   },
+  statusIcon: {
+    marginRight: 10,
+  },
   dropdown: {
     position: 'absolute',
     top: 78,
@@ -180,6 +227,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
   },
+  dropdownEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -189,6 +242,11 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    flex: 1,
+  },
+  emptyText: {
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
   },
 });

@@ -4,6 +4,7 @@ import type {
   Reporte,
   CrearReportePayload,
   ApiResponse,
+  AlertasZonaResponse,
   PaginatedResponse,
 } from '../types';
 
@@ -53,5 +54,10 @@ export const reportesService = {
   async cancelar(id: string): Promise<Reporte> {
     const { data } = await api.patch<ApiResponse<Reporte>>(`/reportes/${id}/cancelar`);
     return data.data;
+  },
+
+  async obtenerAlertasZona(): Promise<AlertasZonaResponse> {
+    const { data } = await api.get<AlertasZonaResponse>('/reportes/alertas-zona');
+    return data;
   },
 };

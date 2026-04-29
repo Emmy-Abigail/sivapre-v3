@@ -14,11 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
 import { useTheme } from '../theme';
 import { useAuth } from '../hooks/useAuth';
-import { useMisReportes } from '../hooks/useReportes';
+import { useMisReportes, useAlertasZona } from '../hooks/useReportes';
 import type { AppColors } from '../theme';
-import type { MainTabParamList, MainStackParamList } from '../types';
+import type { MainTabParamList, MainStackParamList, NivelAlerta, AlertaZona } from '../types';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -27,32 +28,7 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<MainStackParamList>
 >;
 
-// ─── Datos estáticos de alertas (reemplazar con fetch real cuando esté listo) ──
-
-const ALERTAS_MOCK = [
-  {
-    id: '1',
-    zona: 'San Juan de Lurigancho',
-    nivel: 'Alto' as const,
-    descripcion: 'Alta densidad de criaderos reportados esta semana.',
-  },
-  {
-    id: '2',
-    zona: 'Ate Vitarte',
-    nivel: 'Medio' as const,
-    descripcion: 'Incremento de casos sospechosos en el distrito.',
-  },
-  {
-    id: '3',
-    zona: 'Villa El Salvador',
-    nivel: 'Bajo' as const,
-    descripcion: 'Situación estable, continúa la vigilancia.',
-  },
-];
-
-type NivelAlerta = 'Alto' | 'Medio' | 'Bajo';
-
-// ─── Componentes internos ──────────────────────────────────────────────────────
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 interface KpiCardProps {
   value: number | string;
@@ -69,30 +45,72 @@ function KpiCard({ value, label, colors }: KpiCardProps) {
   );
 }
 
+// ─── Skeleton de carga ────────────────────────────────────────────────────────
+
+function AlertaSkeleton({ colors }: { colors: AppColors }) {
+  return (
+    <View style={[styles.alertCard, { backgroundColor: colors.surface }]}>
+      <View style={[styles.skeletonBadge, { backgroundColor: colors.surfaceVariant }]} />
+      <View style={styles.alertContent}>
+        <View style={[styles.skeletonLine, { backgroundColor: colors.surfaceVariant, width: '60%' }]} />
+        <View style={[styles.skeletonLine, { backgroundColor: colors.surfaceVariant, width: '90%', marginTop: 6 }]} />
+      </View>
+    </View>
+  );
+}
+
+// ─── Alerta Card ──────────────────────────────────────────────────────────────
+
 interface AlertaCardProps {
-  zona: string;
-  nivel: NivelAlerta;
-  descripcion: string;
+  alerta: AlertaZona;
   colors: AppColors;
 }
 
-function AlertaCard({ zona, nivel, descripcion, colors }: AlertaCardProps) {
-  const nivelConfig: Record<NivelAlerta, { bg: string; text: string }> = {
-    Alto: { bg: colors.error, text: '#FFFFFF' },
-    Medio: { bg: colors.warning, text: '#FFFFFF' },
-    Bajo: { bg: colors.success, text: '#FFFFFF' },
+function AlertaCard({ alerta, colors }: AlertaCardProps) {
+  const nivelConfig: Record<NivelAlerta, { bg: string; icono: string }> = {
+    Alto:  { bg: colors.error,   icono: 'alert-circle'      },
+    Medio: { bg: colors.warning, icono: 'warning'           },
+    Bajo:  { bg: colors.success, icono: 'checkmark-circle'  },
   };
 
-  const config = nivelConfig[nivel];
+  const { bg, icono } = nivelConfig[alerta.nivel];
 
   return (
-    <View style={[styles.alertCard, { backgroundColor: colors.surface }]}>
-      <View style={[styles.alertBadge, { backgroundColor: config.bg }]}>
-        <Text style={[styles.alertBadgeText, { color: config.text }]}>{nivel}</Text>
+    <View
+      style={[
+        styles.alertCard,
+        { backgroundColor: colors.surface },
+        alerta.es_mi_zona && { borderLeftWidth: 3, borderLeftColor: colors.primary },
+      ]}
+    >
+      {/* Badge de nivel */}
+      <View style={[styles.alertIconBox, { backgroundColor: bg + '20' }]}>
+        <Ionicons name={icono as any} size={20} color={bg} />
       </View>
+
+      {/* Contenido */}
       <View style={styles.alertContent}>
-        <Text style={[styles.alertZona, { color: colors.text }]}>{zona}</Text>
-        <Text style={[styles.alertDesc, { color: colors.textSecondary }]}>{descripcion}</Text>
+        <View style={styles.alertTopRow}>
+          <Text style={[styles.alertZona, { color: colors.text }]} numberOfLines={1}>
+            {alerta.zona}
+          </Text>
+          {alerta.es_mi_zona && (
+            <View style={[styles.miZonaBadge, { backgroundColor: colors.primarySubtle }]}>
+              <Text style={[styles.miZonaText, { color: colors.primary }]}>Mi zona</Text>
+            </View>
+          )}
+        </View>
+        <Text style={[styles.alertDesc, { color: colors.textSecondary }]} numberOfLines={2}>
+          {alerta.descripcion}
+        </Text>
+        <View style={styles.alertFooter}>
+          <View style={[styles.nivelBadge, { backgroundColor: bg }]}>
+            <Text style={styles.nivelText}>{alerta.nivel}</Text>
+          </View>
+          <Text style={[styles.alertCount, { color: colors.textDisabled }]}>
+            {alerta.total_reportes} reporte{alerta.total_reportes !== 1 ? 's' : ''}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -103,26 +121,106 @@ function AlertaCard({ zona, nivel, descripcion, colors }: AlertaCardProps) {
 export default function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { usuario } = useAuth();
-  const { data, isLoading } = useMisReportes();
+  const { data: reportesData, isLoading: loadingReportes } = useMisReportes();
+  const {
+    data: alertasData,
+    isLoading: loadingAlertas,
+    isError: errorAlertas,
+    refetch: refetchAlertas,
+  } = useAlertasZona();
   const insets = useSafeAreaInsets();
 
   const primerNombre = usuario?.nombre?.split(' ')[0] ?? 'Ciudadano';
 
-  // KPIs derivados de PaginatedResponse<Reporte>
-  // Cuando haya un endpoint dedicado de estadísticas, reemplazar estos cálculos
-  const reportesEnviados = data?.total ?? 0;
-  const reportesVerificados =
-    data?.data?.filter((r) => r.estado === 'en_revision').length ?? 0;
-  const reportesResueltos =
-    data?.data?.filter((r) => r.estado === 'resuelto').length ?? 0;
+  const reportesEnviados  = reportesData?.total ?? 0;
+  const reportesEnRevision = reportesData?.data?.filter((r) => r.estado === 'en_revision').length ?? 0;
+  const reportesResueltos = reportesData?.data?.filter((r) => r.estado === 'resuelto').length ?? 0;
+
+  const alertas       = alertasData?.alertas ?? [];
+  const tieneZona     = alertasData?.tiene_zona ?? false;
+
+  // ── Sección alertas ─────────────────────────────────────────────────────────
+
+  const renderAlertas = () => {
+    if (loadingAlertas) {
+      return (
+        <>
+          <AlertaSkeleton colors={colors} />
+          <AlertaSkeleton colors={colors} />
+          <AlertaSkeleton colors={colors} />
+        </>
+      );
+    }
+
+    if (errorAlertas) {
+      return (
+        <View style={[styles.emptyBox, { backgroundColor: colors.surface }]}>
+          <Ionicons name="cloud-offline-outline" size={32} color={colors.textDisabled} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            Sin conexión
+          </Text>
+          <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+            No se pudieron cargar las alertas.
+          </Text>
+          <TouchableOpacity
+            style={[styles.emptyAction, { backgroundColor: colors.primary }]}
+            onPress={() => refetchAlertas()}
+          >
+            <Text style={[styles.emptyActionText, { color: colors.textOnPrimary }]}>
+              Reintentar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (alertas.length === 0) {
+      // Usuario sin ubicación configurada
+      if (!tieneZona) {
+        return (
+          <View style={[styles.emptyBox, { backgroundColor: colors.surface }]}>
+            <Ionicons name="location-outline" size={32} color={colors.primary} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              Configura tu ubicación
+            </Text>
+            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+              Agrega tu distrito en tu perfil para ver alertas relevantes de tu zona.
+            </Text>
+            <TouchableOpacity
+              style={[styles.emptyAction, { backgroundColor: colors.primary }]}
+              onPress={() => navigation.navigate('Perfil')}
+            >
+              <Text style={[styles.emptyActionText, { color: colors.textOnPrimary }]}>
+                Ir a perfil
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      // Usuario con ubicación pero sin reportes recientes en su zona
+      return (
+        <View style={[styles.emptyBox, { backgroundColor: colors.surface }]}>
+          <Ionicons name="shield-checkmark-outline" size={32} color={colors.success} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            Sin alertas activas
+          </Text>
+          <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+            No se han reportado criaderos en tu zona en los últimos 30 días.
+          </Text>
+        </View>
+      );
+    }
+
+    return alertas.map((alerta, idx) => (
+      <AlertaCard key={`${alerta.departamento}-${alerta.provincia}-${idx}`} alerta={alerta} colors={colors} />
+    ));
+  };
 
   return (
     <ScrollView
       style={[styles.scroll, { backgroundColor: colors.background }]}
-      contentContainerStyle={[
-        styles.container,
-        { paddingTop: insets.top + 20 },
-      ]}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 20 }]}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Saludo ── */}
@@ -146,7 +244,7 @@ export default function HomeScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* ── Botón principal ── */}
+      {/* ── Botón reportar ── */}
       <TouchableOpacity
         style={[styles.reportButton, { backgroundColor: colors.primary }]}
         onPress={() => navigation.navigate('Report')}
@@ -161,27 +259,27 @@ export default function HomeScreen({ navigation }: Props) {
 
       {/* ── KPIs ── */}
       <Text style={[styles.sectionTitle, { color: colors.text }]}>Tu impacto</Text>
-      {isLoading ? (
+      {loadingReportes ? (
         <ActivityIndicator color={colors.primary} style={styles.loader} />
       ) : (
         <View style={styles.kpiRow}>
-          <KpiCard value={reportesEnviados} label="Reportes enviados" colors={colors} />
-          <KpiCard value={reportesVerificados} label="Verificados" colors={colors} />
-          <KpiCard value={reportesResueltos} label="Resueltos" colors={colors} />
+          <KpiCard value={reportesEnviados}   label="Reportes enviados" colors={colors} />
+          <KpiCard value={reportesEnRevision} label="En revisión"        colors={colors} />
+          <KpiCard value={reportesResueltos}  label="Resueltos"          colors={colors} />
         </View>
       )}
 
       {/* ── Alertas ── */}
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Alertas en tu zona</Text>
-      {ALERTAS_MOCK.map((alerta) => (
-        <AlertaCard
-          key={alerta.id}
-          zona={alerta.zona}
-          nivel={alerta.nivel}
-          descripcion={alerta.descripcion}
-          colors={colors}
-        />
-      ))}
+      <View style={styles.alertasHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Alertas en tu zona</Text>
+        {!loadingAlertas && !errorAlertas && alertas.length > 0 && (
+          <Text style={[styles.alertasSubtitle, { color: colors.textSecondary }]}>
+            Últimos 30 días
+          </Text>
+        )}
+      </View>
+
+      {renderAlertas()}
     </ScrollView>
   );
 }
@@ -189,13 +287,10 @@ export default function HomeScreen({ navigation }: Props) {
 // ─── Estilos ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-  },
+  scroll: { flex: 1 },
   container: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-    // paddingTop se aplica dinámicamente con insets.top + 20
   },
 
   // Saludo
@@ -205,9 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  saludoTexts: {
-    flex: 1,
-  },
+  saludoTexts: { flex: 1 },
   saludo: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 22,
@@ -247,17 +340,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Sección
+  // Secciones
   sectionTitle: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 16,
     marginBottom: 12,
   },
-
-  // Loader
   loader: {
     marginBottom: 28,
     alignSelf: 'flex-start',
+  },
+  alertasHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  alertasSubtitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+    marginBottom: 12,
   },
 
   // KPIs
@@ -288,12 +389,93 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+  // Skeleton
+  skeletonBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+  },
+
   // Alertas
   alertCard: {
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  alertIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  alertContent: { flex: 1, gap: 4 },
+  alertTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  alertZona: {
+    fontFamily: 'Montserrat-ExtraBold',
+    fontSize: 13,
+    flex: 1,
+  },
+  miZonaBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  miZonaText: {
+    fontFamily: 'Montserrat-ExtraBold',
+    fontSize: 10,
+  },
+  alertDesc: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  alertFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  nivelBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  nivelText: {
+    fontFamily: 'Montserrat-ExtraBold',
+    fontSize: 10,
+    color: '#FFFFFF',
+  },
+  alertCount: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 11,
+  },
+
+  // Estados vacíos / error
+  emptyBox: {
+    borderRadius: 14,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -301,26 +483,25 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  alertBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  alertBadgeText: {
+  emptyTitle: {
     fontFamily: 'Montserrat-ExtraBold',
-    fontSize: 11,
+    fontSize: 14,
+    marginTop: 4,
   },
-  alertContent: {
-    flex: 1,
+  emptyDesc: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
   },
-  alertZona: {
+  emptyAction: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  emptyActionText: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 13,
-  },
-  alertDesc: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    marginTop: 2,
   },
 });

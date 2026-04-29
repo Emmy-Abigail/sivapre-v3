@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import cloudinary
 import cloudinary.uploader
@@ -15,7 +16,7 @@ from app.models.reporte import Reporte
 from app.models.usuario import Usuario
 from app.schemas.enums import EstadoReporteEnum
 from app.schemas.responses import ApiResponse, FotoResponse, PaginatedData
-from app.schemas.reporte import ReporteCreate, ReporteResponse, ReporteUpdate
+from app.schemas.reporte import AlertaZona, AlertasZonaResponse, ReporteCreate, ReporteResponse, ReporteUpdate
 
 router = APIRouter(tags=["Reportes"])
 
@@ -148,6 +149,75 @@ async def mis_reportes(
             pagina=pagina,
             porPagina=porPagina,
         )
+    )
+
+
+# ─── Alertas por zona ────────────────────────────────────────────────────────
+
+@router.get(
+    "/alertas-zona",
+    response_model=AlertasZonaResponse,
+    summary="Reportes de criaderos agrupados por zona (últimos 30 días)",
+)
+async def alertas_zona(
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    desde = datetime.now(timezone.utc) - timedelta(days=30)
+
+    # Agrupa reportes por departamento/provincia del usuario que los reportó
+    stmt = (
+        select(
+            Usuario.departamento,
+            Usuario.provincia,
+            func.count(Reporte.id).label("total"),
+        )
+        .select_from(Reporte)
+        .join(Usuario, Reporte.usuario_id == Usuario.id)
+        .where(
+            Reporte.fecha_reporte >= desde,
+            Usuario.departamento.isnot(None),
+            Usuario.provincia.isnot(None),
+        )
+        .group_by(Usuario.departamento, Usuario.provincia)
+        .order_by(func.count(Reporte.id).desc())
+        .limit(10)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    def _nivel_y_descripcion(total: int) -> tuple[str, str]:
+        if total >= 10:
+            return "Alto", f"{total} criaderos reportados en los últimos 30 días."
+        if total >= 4:
+            return "Medio", f"{total} criaderos reportados, situación en vigilancia."
+        return "Bajo", f"{total} criadero(s) reportado(s), situación estable."
+
+    alertas: list[AlertaZona] = []
+    for departamento, provincia, total in rows:
+        nivel, descripcion = _nivel_y_descripcion(total)
+        alertas.append(
+            AlertaZona(
+                zona=f"{provincia}, {departamento}",
+                departamento=departamento,
+                provincia=provincia,
+                nivel=nivel,
+                descripcion=descripcion,
+                total_reportes=total,
+                es_mi_zona=(
+                    departamento == current_user.departamento
+                    and provincia == current_user.provincia
+                ),
+            )
+        )
+
+    # Mi zona siempre primero, luego por volumen descendente
+    alertas.sort(key=lambda a: (not a.es_mi_zona, -a.total_reportes))
+
+    return AlertasZonaResponse(
+        alertas=alertas[:5],
+        tiene_zona=bool(current_user.departamento and current_user.provincia),
     )
 
 

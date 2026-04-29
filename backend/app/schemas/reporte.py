@@ -41,3 +41,18 @@ class ReporteResponse(ReporteBase):
 
 class ReporteUpdate(BaseModel):
     estado: EstadoReporteEnum | None = None
+
+
+class AlertaZona(BaseModel):
+    zona: str
+    departamento: str
+    provincia: str
+    nivel: str          # 'Alto' | 'Medio' | 'Bajo'
+    descripcion: str
+    total_reportes: int
+    es_mi_zona: bool
+
+
+class AlertasZonaResponse(BaseModel):
+    alertas: list[AlertaZona]
+    tiene_zona: bool    # si el usuario tiene departamento/provincia en su perfil

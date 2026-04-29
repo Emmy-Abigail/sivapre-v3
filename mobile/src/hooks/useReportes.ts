@@ -8,6 +8,7 @@ export const reportesKeys = {
   all: ['reportes'] as const,
   mis: () => [...reportesKeys.all, 'mis-reportes'] as const,
   detalle: (id: string) => [...reportesKeys.all, 'detalle', id] as const,
+  alertasZona: () => [...reportesKeys.all, 'alertas-zona'] as const,
 };
 
 export function useMisReportes(pagina = 1) {
@@ -34,6 +35,15 @@ export function useCrearReporte() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: reportesKeys.mis() });
     },
+  });
+}
+
+export function useAlertasZona() {
+  return useQuery({
+    queryKey: reportesKeys.alertasZona(),
+    queryFn: () => reportesService.obtenerAlertasZona(),
+    staleTime: 1000 * 60 * 5,   // 5 min — las alertas no cambian cada segundo
+    retry: 1,
   });
 }
 
