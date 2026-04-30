@@ -1,4 +1,6 @@
-import { api } from './api';
+import axios from 'axios';
+
+import { api, BASE_URL } from './api';
 import { storage, StorageKeys } from '../store/storage';
 import type {
   LoginPayload,
@@ -52,6 +54,34 @@ export const authService = {
   async isAuthenticated(): Promise<boolean> {
     const token = await storage.getItem(StorageKeys.AUTH_TOKEN);
     return !!token;
+  },
+
+  /**
+   * Renueva el access token usando el refresh token almacenado.
+   *
+   * Usa axios directamente (NO la instancia `api`) para evitar
+   * que el interceptor de 401 se active en cadena sobre este mismo request.
+   *
+   * Retorna true si el refresh fue exitoso, false si hay que hacer logout.
+   */
+  async refreshSession(): Promise<boolean> {
+    const refreshToken = await storage.getItem(StorageKeys.REFRESH_TOKEN);
+    if (!refreshToken) return false;
+
+    try {
+      const { data } = await axios.post<AuthResponse>(
+        `${BASE_URL}/auth/refresh`,
+        { refresh_token: refreshToken },
+        { timeout: 10_000 },
+      );
+      await Promise.all([
+        storage.setItem(StorageKeys.AUTH_TOKEN, data.token),
+        storage.setItem(StorageKeys.REFRESH_TOKEN, data.refreshToken),
+      ]);
+      return true;
+    } catch {
+      return false;
+    }
   },
 };
 

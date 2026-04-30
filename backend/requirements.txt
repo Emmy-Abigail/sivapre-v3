@@ -18,6 +18,19 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 
-# File uploads & cloud storage
-cloudinary==1.41.0
+# HTTP client async (push notifications)
+httpx==0.28.1
+
+# Rate limiting — protección contra fuerza bruta en los endpoints de auth
+slowapi==0.1.9
+
+# Procesamiento de imágenes (compresión antes de guardar en disco)
+Pillow==11.2.1
+
+# File uploads
 python-multipart==0.0.20
+
+# Cloudinary — DEPRECADO. Ya no se usa en el código principal.
+# El backend usa almacenamiento local (STORAGE_BACKEND=local).
+# Mantener aquí hasta que se confirme que no hay instancias apuntando a Cloudinary.
+cloudinary==1.41.0

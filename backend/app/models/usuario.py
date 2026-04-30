@@ -22,6 +22,7 @@ class Usuario(Base):
     provincia: Mapped[str | None] = mapped_column(String(100), nullable=True)
     distrito: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rol: Mapped[str] = mapped_column(String(50), default='ciudadano', server_default='ciudadano')
+    push_token: Mapped[str | None] = mapped_column(String(200), nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     es_activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     fecha_registro: Mapped[datetime] = mapped_column(

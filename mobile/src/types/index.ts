@@ -108,6 +108,11 @@ export interface CrearReportePayload {
   observa_larvas: ObservaLarvas;
   conocimiento_dengue_cercano?: ConocimientoDengue;
   comentarios?: string;
+  // Campos de idempotencia: permiten reintentar el envío sin crear duplicados.
+  // device_id: UUID persistente del dispositivo, generado en la primera instalación.
+  // local_id:  UUID único por reporte, generado en el momento de crearlo.
+  device_id?: string;
+  local_id?: string;
 }
 
 

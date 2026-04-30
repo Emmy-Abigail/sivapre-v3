@@ -25,6 +25,14 @@ class ReporteCreate(ReporteBase):
     longitud: float = Field(..., ge=-180, le=180)
     foto_url: str | None = Field(None, max_length=500)
 
+    # Campos de idempotencia para reportes offline.
+    # device_id: UUID persistente del dispositivo móvil (generado en la primera instalación).
+    # local_id:  UUID generado en la app en el momento de crear el reporte.
+    # Si el backend recibe (device_id, local_id) que ya existe, devuelve el reporte
+    # existente en lugar de crear un duplicado.
+    device_id: str | None = Field(None, max_length=64)
+    local_id: str | None = Field(None, max_length=64)
+
 
 class ReporteResponse(ReporteBase):
     id: uuid.UUID
@@ -35,6 +43,8 @@ class ReporteResponse(ReporteBase):
     estado: EstadoReporteEnum
     fecha_reporte: datetime
     fecha_actualizacion: datetime
+    device_id: str | None = None
+    local_id: str | None = None
 
     model_config = {"from_attributes": True}
 

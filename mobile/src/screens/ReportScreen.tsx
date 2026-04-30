@@ -1,17 +1,19 @@
-// ReportScree
+// ReportScreen
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  Image,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +23,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../theme';
 import { useCrearReporte } from '../hooks/useReportes';
 import { reportesService } from '../services/reportes';
+import { storage, StorageKeys } from '../store/storage';
 import type {
   MainTabParamList,
   TipoLugar,
@@ -45,6 +48,17 @@ const OPCIONES_LARVAS: ObservaLarvas[] = [
 const OPCIONES_DENGUE: ConocimientoDengue[] = [
   'Sí', 'No lo sé', 'No',
 ];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function _getOrCreateDeviceId(): Promise<string> {
+  let id = await storage.getItem(StorageKeys.DEVICE_ID);
+  if (!id) {
+    id = Crypto.randomUUID();
+    await storage.setItem(StorageKeys.DEVICE_ID, id);
+  }
+  return id;
+}
 
 // ─── Componente de chips reutilizable ────────────────────────────────────────
 
@@ -103,16 +117,39 @@ export default function ReportScreen({ navigation }: Props) {
   const [dengue, setDengue] = useState<ConocimientoDengue | null>(null);
   const [comentarios, setComentarios] = useState('');
 
-  // Estado de foto
+  // Estado de foto — desacoplado del submit
+  // La foto se sube en paralelo mientras el usuario llena el formulario.
+  // Si falla, puede reintentar o continuar sin foto.
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [fotoError, setFotoError] = useState(false);
 
   // Estado de ubicación
   const [latitud, setLatitud] = useState<number | null>(null);
   const [longitud, setLongitud] = useState<number | null>(null);
+  const [obtenendoUbicacion, setObtenendoUbicacion] = useState(false);
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
+  // local_id se genera UNA vez al montar la pantalla (por sesión de formulario).
+  // Así, si el usuario pulsa Enviar dos veces rápido (o hay un reintento de red),
+  // ambos requests llevan el mismo local_id y el backend devuelve el mismo reporte.
+  const localIdRef = useRef<string>(Crypto.randomUUID());
+
+  // ─── Lógica de foto ──────────────────────────────────────────────────────────
+
+  const _subirFoto = async (uri: string) => {
+    setSubiendoFoto(true);
+    setFotoError(false);
+    try {
+      const url = await reportesService.subirFoto(uri);
+      setFotoUrl(url);
+    } catch {
+      setFotoError(true);
+      setFotoUrl(null);
+    } finally {
+      setSubiendoFoto(false);
+    }
+  };
 
   const tomarFoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -122,26 +159,24 @@ export default function ReportScreen({ navigation }: Props) {
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'] as any,
       allowsEditing: true,
+      // 0.7: archivo ~2-4 MB antes de llegar al backend.
+      // Pillow comprime a WebP ≤400 KB al guardar. Este valor equilibra
+      // calidad de evidencia con velocidad de carga en zonas de señal débil.
       quality: 0.7,
     });
 
     if (!result.canceled && result.assets[0]) {
       const uri = result.assets[0].uri;
       setFotoUri(uri);
-      try {
-        setSubiendoFoto(true);
-        const url = await reportesService.subirFoto(uri);
-        setFotoUrl(url);
-      } catch {
-        Alert.alert('Error', 'No se pudo subir la foto. Verifica tu conexión e intenta de nuevo.');
-        setFotoUri(null);
-      } finally {
-        setSubiendoFoto(false);
-      }
+      // La subida comienza inmediatamente en paralelo con el llenado del formulario.
+      // Así el usuario no espera al presionar Enviar.
+      _subirFoto(uri);
     }
   };
+
+  // ─── Lógica de ubicación ──────────────────────────────────────────────────
 
   const obtenerUbicacion = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -149,10 +184,23 @@ export default function ReportScreen({ navigation }: Props) {
       Alert.alert('Permiso requerido', 'Necesitamos tu ubicación para registrar el criadero.');
       return;
     }
-    const location = await Location.getCurrentPositionAsync({});
-    setLatitud(location.coords.latitude);
-    setLongitud(location.coords.longitude);
+    setObtenendoUbicacion(true);
+    try {
+      // Accuracy.Balanced: fix más rápido que High en zonas con señal GPS débil.
+      // Precisión ~30m — suficiente para geolocalizar un criadero.
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setLatitud(location.coords.latitude);
+      setLongitud(location.coords.longitude);
+    } catch {
+      Alert.alert('Error de GPS', 'No se pudo obtener la ubicación. Asegúrate de estar al aire libre e intenta de nuevo.');
+    } finally {
+      setObtenendoUbicacion(false);
+    }
   };
+
+  // ─── Submit ───────────────────────────────────────────────────────────────
 
   const limpiarFormulario = () => {
     setTipoLugar(null);
@@ -162,8 +210,11 @@ export default function ReportScreen({ navigation }: Props) {
     setComentarios('');
     setFotoUri(null);
     setFotoUrl(null);
+    setFotoError(false);
     setLatitud(null);
     setLongitud(null);
+    // Generar nuevo local_id para el próximo reporte
+    localIdRef.current = Crypto.randomUUID();
   };
 
   const handleSubmit = async () => {
@@ -176,16 +227,52 @@ export default function ReportScreen({ navigation }: Props) {
       return;
     }
 
+    // Si la foto falló, preguntar al usuario si desea continuar sin ella.
+    // Alert usa callbacks directos para mantener compatibilidad con el typing de RN.
+    if (fotoUri && fotoError) {
+      Alert.alert(
+        'Foto no subida',
+        'La foto no pudo enviarse por problemas de conexión. ¿Continuar sin foto?',
+        [
+          { text: 'Reintentar foto', onPress: () => _subirFoto(fotoUri) },
+          { text: 'Enviar sin foto', style: 'destructive', onPress: () => _doSubmit(null) },
+          { text: 'Cancelar', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+
+    // Si la foto aún está subiendo, esperar o continuar sin ella.
+    if (subiendoFoto) {
+      Alert.alert(
+        'Foto en proceso',
+        'La foto se está subiendo. ¿Esperar o enviar el reporte ahora sin foto?',
+        [
+          { text: 'Esperar', style: 'cancel' },
+          { text: 'Enviar sin foto', onPress: () => _doSubmit(null) },
+        ],
+      );
+      return;
+    }
+
+    await _doSubmit(fotoUrl);
+  };
+
+  const _doSubmit = async (foto: string | null) => {
     try {
+      const deviceId = await _getOrCreateDeviceId();
+
       await crearReporte({
-        latitud,
-        longitud,
-        foto_url: fotoUrl ?? undefined,
-        tipo_lugar: tipoLugar,
-        tipo_objeto: tipoObjeto,
-        observa_larvas: observaLarvas,
+        latitud: latitud!,
+        longitud: longitud!,
+        foto_url: foto ?? undefined,
+        tipo_lugar: tipoLugar!,
+        tipo_objeto: tipoObjeto!,
+        observa_larvas: observaLarvas!,
         conocimiento_dengue_cercano: dengue ?? undefined,
         comentarios: comentarios.trim() || undefined,
+        device_id: deviceId,
+        local_id: localIdRef.current,
       });
 
       Alert.alert('¡Reporte enviado!', 'Gracias por ayudar a tu comunidad.', [
@@ -206,7 +293,6 @@ export default function ReportScreen({ navigation }: Props) {
   const ubicacionObtenida = latitud !== null && longitud !== null;
   const formularioValido = ubicacionObtenida && tipoLugar && tipoObjeto && observaLarvas;
 
-  // paddingBottom dinámico: respeta la altura real del teclado en cualquier dispositivo
   const paddingBottom = keyboard.keyboardShown
     ? keyboard.keyboardHeight + 24
     : insets.bottom + 40;
@@ -218,54 +304,85 @@ export default function ReportScreen({ navigation }: Props) {
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          {
-            paddingTop: insets.top + 20,
-            paddingBottom,
-          },
+          { paddingTop: insets.top + 20, paddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
         {/* Encabezado */}
-        <Text style={[styles.pageTitle, { color: colors.text }]}>
-          Nuevo Reporte
-        </Text>
+        <Text style={[styles.pageTitle, { color: colors.text }]}>Nuevo Reporte</Text>
         <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
           Completa el formulario en menos de 60 segundos
         </Text>
 
         {/* ── 1. Foto ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          1. Evidencia fotográfica
+          1. Evidencia fotográfica{' '}
+          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontWeight: 'normal' }}>
+            (recomendada)
+          </Text>
         </Text>
+
         <TouchableOpacity
           style={[
             styles.photoBox,
-            { backgroundColor: colors.surface, borderColor: colors.border },
+            { backgroundColor: colors.surface, borderColor: fotoError ? '#e53e3e' : colors.border },
           ]}
           onPress={tomarFoto}
-          disabled={subiendoFoto}
+          disabled={subiendoFoto || isPending}
         >
           {fotoUri ? (
-            <Image source={{ uri: fotoUri }} style={styles.photoPreview} />
+            <View style={styles.photoPreviewContainer}>
+              <Image source={{ uri: fotoUri }} style={styles.photoPreview} />
+              {subiendoFoto && (
+                <View style={styles.photoOverlay}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.photoOverlayText}>Subiendo...</Text>
+                </View>
+              )}
+              {fotoError && !subiendoFoto && (
+                <View style={[styles.photoOverlay, { backgroundColor: 'rgba(229,62,62,0.75)' }]}>
+                  <Ionicons name="warning-outline" size={20} color="#fff" />
+                  <Text style={styles.photoOverlayText}>No se pudo subir</Text>
+                </View>
+              )}
+              {fotoUrl && !subiendoFoto && !fotoError && (
+                <View style={[styles.photoOverlay, { backgroundColor: 'rgba(56,161,105,0.6)' }]}>
+                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                </View>
+              )}
+            </View>
           ) : (
             <View style={styles.photoPlaceholder}>
               <Ionicons name="camera-outline" size={36} color={colors.textSecondary} />
               <Text style={[styles.photoText, { color: colors.textSecondary }]}>
-                {subiendoFoto ? 'Subiendo foto...' : 'Toca para tomar una foto'}
+                Toca para tomar una foto
               </Text>
             </View>
           )}
         </TouchableOpacity>
 
         {fotoUri && (
-          <TouchableOpacity style={styles.retakeButton} onPress={tomarFoto}>
-            <Ionicons name="refresh-outline" size={16} color={colors.primary} />
-            <Text style={[styles.retakeText, { color: colors.primary }]}>
-              Tomar otra foto
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.photoActions}>
+            <TouchableOpacity
+              style={styles.photoActionBtn}
+              onPress={tomarFoto}
+              disabled={subiendoFoto || isPending}
+            >
+              <Ionicons name="refresh-outline" size={15} color={colors.primary} />
+              <Text style={[styles.photoActionText, { color: colors.primary }]}>Tomar otra</Text>
+            </TouchableOpacity>
+            {fotoError && !subiendoFoto && (
+              <TouchableOpacity
+                style={styles.photoActionBtn}
+                onPress={() => _subirFoto(fotoUri)}
+              >
+                <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
+                <Text style={[styles.photoActionText, { color: colors.primary }]}>Reintentar subida</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
         {/* ── 2. Ubicación ── */}
@@ -278,86 +395,67 @@ export default function ReportScreen({ navigation }: Props) {
             {
               backgroundColor: ubicacionObtenida ? colors.primary : colors.surface,
               borderColor: colors.primary,
+              opacity: obtenendoUbicacion ? 0.7 : 1,
             },
           ]}
           onPress={obtenerUbicacion}
+          disabled={obtenendoUbicacion || isPending}
         >
-          <Ionicons
-            name={ubicacionObtenida ? 'location' : 'location-outline'}
-            size={20}
-            color={ubicacionObtenida ? colors.textOnPrimary : colors.primary}
-          />
+          {obtenendoUbicacion ? (
+            <ActivityIndicator
+              color={ubicacionObtenida ? colors.textOnPrimary : colors.primary}
+              size="small"
+            />
+          ) : (
+            <Ionicons
+              name={ubicacionObtenida ? 'location' : 'location-outline'}
+              size={20}
+              color={ubicacionObtenida ? colors.textOnPrimary : colors.primary}
+            />
+          )}
           <Text
             style={[
               styles.locationText,
               { color: ubicacionObtenida ? colors.textOnPrimary : colors.primary },
             ]}
           >
-            {ubicacionObtenida
+            {obtenendoUbicacion
+              ? 'Obteniendo ubicación...'
+              : ubicacionObtenida
               ? `✓ ${latitud!.toFixed(5)}, ${longitud!.toFixed(5)}`
               : 'Capturar mi ubicación GPS'}
           </Text>
         </TouchableOpacity>
 
         {/* ── 3. Tipo de lugar ── */}
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          3. Tipo de lugar
-        </Text>
-        <ChipGroup
-          opciones={TIPOS_LUGAR}
-          seleccionado={tipoLugar}
-          onSelect={setTipoLugar}
-          colors={colors}
-        />
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>3. Tipo de lugar</Text>
+        <ChipGroup opciones={TIPOS_LUGAR} seleccionado={tipoLugar} onSelect={setTipoLugar} colors={colors} />
 
         {/* ── 4. Tipo de objeto ── */}
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          4. Tipo de objeto
-        </Text>
-        <ChipGroup
-          opciones={TIPOS_OBJETO}
-          seleccionado={tipoObjeto}
-          onSelect={setTipoObjeto}
-          colors={colors}
-        />
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>4. Tipo de objeto</Text>
+        <ChipGroup opciones={TIPOS_OBJETO} seleccionado={tipoObjeto} onSelect={setTipoObjeto} colors={colors} />
 
         {/* ── 5. Larvas ── */}
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          5. ¿Observas larvas?
-        </Text>
-        <ChipGroup
-          opciones={OPCIONES_LARVAS}
-          seleccionado={observaLarvas}
-          onSelect={setObservaLarvas}
-          colors={colors}
-        />
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>5. ¿Observas larvas?</Text>
+        <ChipGroup opciones={OPCIONES_LARVAS} seleccionado={observaLarvas} onSelect={setObservaLarvas} colors={colors} />
 
         {/* ── 6. Dengue cercano ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
           6. ¿Conoces casos de dengue cerca?
         </Text>
-        <ChipGroup
-          opciones={OPCIONES_DENGUE}
-          seleccionado={dengue}
-          onSelect={setDengue}
-          colors={colors}
-        />
+        <ChipGroup opciones={OPCIONES_DENGUE} seleccionado={dengue} onSelect={setDengue} colors={colors} />
 
         {/* ── 7. Comentarios ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
           7. Comentarios adicionales{' '}
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular' }}>
+          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontWeight: 'normal' }}>
             (opcional)
           </Text>
         </Text>
         <TextInput
           style={[
             styles.textArea,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              color: colors.text,
-            },
+            { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
           ]}
           placeholder="Describe lo que observas..."
           placeholderTextColor={colors.textDisabled}
@@ -378,12 +476,15 @@ export default function ReportScreen({ navigation }: Props) {
           onPress={handleSubmit}
           disabled={!formularioValido || isPending}
         >
-          <Ionicons name="send-outline" size={18} color={colors.textOnPrimary} />
+          {isPending ? (
+            <ActivityIndicator color={colors.textOnPrimary} size="small" />
+          ) : (
+            <Ionicons name="send-outline" size={18} color={colors.textOnPrimary} />
+          )}
           <Text style={[styles.submitButtonText, { color: colors.textOnPrimary }]}>
             {isPending ? 'ENVIANDO...' : 'ENVIAR REPORTE'}
           </Text>
         </TouchableOpacity>
-
       </ScrollView>
     </View>
   );
@@ -393,10 +494,7 @@ export default function ReportScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: {
-    paddingHorizontal: 20,
-    // paddingTop y paddingBottom se aplican dinámicamente
-  },
+  container: { paddingHorizontal: 20 },
   pageTitle: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 24,
@@ -418,8 +516,27 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
     height: 180,
-    marginBottom: 8,
+    marginBottom: 6,
     overflow: 'hidden',
+  },
+  photoPreviewContainer: {
+    flex: 1,
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  photoOverlayText: {
+    color: '#fff',
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
   },
   photoPlaceholder: {
     flex: 1,
@@ -431,17 +548,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 13,
   },
-  photoPreview: {
-    width: '100%',
-    height: '100%',
+  photoActions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
   },
-  retakeButton: {
+  photoActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 20,
+    gap: 4,
   },
-  retakeText: {
+  photoActionText: {
     fontFamily: 'Inter-Regular',
     fontSize: 13,
   },

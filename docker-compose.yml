@@ -8,8 +8,12 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Monta el código fuente para que hot-reload funcione
+      # Código fuente — hot-reload en desarrollo
       - ./backend:/app
+      # Fotos de reportes — volumen nombrado para persistir entre reinicios y deployments.
+      # CRÍTICO: sin este volumen, las fotos se pierden con cada "docker restart" o redeploy,
+      # dejando foto_url en la BD apuntando a archivos inexistentes.
+      - uploads_data:/app/uploads
     env_file:
       - ./backend/.env
     depends_on:
@@ -55,6 +59,7 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:
 
 networks:
   sivapre-network:

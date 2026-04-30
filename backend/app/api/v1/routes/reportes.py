@@ -2,14 +2,11 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import cloudinary
-import cloudinary.uploader
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import func, select
+from sqlalchemy import and_, exc as sa_exc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.reporte import Reporte
@@ -17,28 +14,21 @@ from app.models.usuario import Usuario
 from app.schemas.enums import EstadoReporteEnum
 from app.schemas.responses import ApiResponse, FotoResponse, PaginatedData
 from app.schemas.reporte import AlertaZona, AlertasZonaResponse, ReporteCreate, ReporteResponse, ReporteUpdate
+from app.services.storage import storage
 
 router = APIRouter(tags=["Reportes"])
 
-# Inicializa Cloudinary una sola vez al cargar el módulo
-cloudinary.config(
-    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-    api_key=settings.CLOUDINARY_API_KEY,
-    api_secret=settings.CLOUDINARY_API_SECRET,
-    secure=True,
-)
-
-_FOTO_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+_FOTO_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — Pillow comprime antes de guardar
 _FOTO_MIME_PERMITIDOS = {"image/jpeg", "image/png", "image/webp"}
 
 
-# ─── Subida de foto ───────────────────────────────────────────────────────────
+# ─── Subida de foto (endpoint independiente) ──────────────────────────────────
 
 @router.post(
     "/foto",
     response_model=ApiResponse[FotoResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Sube una foto y retorna su URL en Cloudinary",
+    summary="Sube una foto y retorna su URL pública",
 )
 async def subir_foto(
     foto: UploadFile = File(...),
@@ -51,51 +41,114 @@ async def subir_foto(
         )
 
     contenido = await foto.read()
-
     if len(contenido) > _FOTO_MAX_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="La imagen no puede superar los 5 MB.",
+            detail="La imagen no puede superar los 10 MB.",
         )
 
     try:
-        resultado = await asyncio.to_thread(
-            cloudinary.uploader.upload,
-            contenido,
-            folder="sivapre/reportes",
-            resource_type="image",
-            transformation=[
-                {"width": 1024, "height": 1024, "crop": "limit"},
-                {"quality": "auto:good"},
-                {"format": "webp"},
-            ],
-        )
-    except Exception:
+        url = await storage.guardar(contenido, foto.content_type or "image/jpeg")
+    except Exception as exc:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudo subir la imagen. Intente nuevamente.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"No se pudo guardar la imagen: {exc}",
         )
 
-    return ApiResponse(data=FotoResponse(url=resultado["secure_url"]))
+    return ApiResponse(data=FotoResponse(url=url))
 
 
-# ─── Crear reporte ────────────────────────────────────────────────────────────
+# ─── Subir foto a un reporte existente (para sincronización offline) ──────────
+
+@router.post(
+    "/{reporte_id}/foto",
+    response_model=ApiResponse[ReporteResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Sube o reemplaza la foto de un reporte existente",
+)
+async def subir_foto_reporte(
+    reporte_id: uuid.UUID,
+    foto: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    if foto.content_type not in _FOTO_MIME_PERMITIDOS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Formato no permitido. Use JPEG, PNG o WebP.",
+        )
+
+    contenido = await foto.read()
+    if len(contenido) > _FOTO_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="La imagen no puede superar los 10 MB.",
+        )
+
+    result = await db.execute(select(Reporte).where(Reporte.id == reporte_id))
+    reporte = result.scalar_one_or_none()
+    if not reporte:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+    if reporte.usuario_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permiso para modificar este reporte.")
+
+    if reporte.foto_url:
+        await storage.eliminar(reporte.foto_url)
+
+    try:
+        url = await storage.guardar(contenido, foto.content_type or "image/jpeg")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"No se pudo guardar la imagen: {exc}",
+        )
+
+    reporte.foto_url = url
+    await db.flush()
+    await db.refresh(reporte)
+
+    return ApiResponse(data=ReporteResponse.model_validate(reporte))
+
+
+# ─── Crear reporte (idempotente) ──────────────────────────────────────────────
 
 @router.post(
     "",
     response_model=ApiResponse[ReporteResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Crea un nuevo reporte de criadero",
+    summary="Crea un nuevo reporte de criadero (idempotente con device_id + local_id)",
 )
 async def crear_reporte(
     data: ReporteCreate,
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
+    """Crea un reporte. Si se envían device_id y local_id, el endpoint es idempotente:
+    reintentos de la misma app devuelven el reporte ya creado sin error y sin duplicar.
+
+    La verificación previa + índice único + bloque IntegrityError son capas defensivas:
+    - La consulta previa maneja el caso normal (reintento llega después del INSERT).
+    - El IntegrityError captura la condición de carrera (dos requests simultáneos).
+    """
+    if data.device_id and data.local_id:
+        existing_result = await db.execute(
+            select(Reporte).where(
+                and_(
+                    Reporte.device_id == data.device_id,
+                    Reporte.local_id == data.local_id,
+                )
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+        if existing:
+            return ApiResponse(data=ReporteResponse.model_validate(existing))
+
     punto = WKTElement(f"POINT({data.longitud} {data.latitud})", srid=4326)
 
     reporte = Reporte(
         usuario_id=current_user.id,
+        device_id=data.device_id,
+        local_id=data.local_id,
         latitud=data.latitud,
         longitud=data.longitud,
         ubicacion=punto,
@@ -107,9 +160,31 @@ async def crear_reporte(
         comentarios=data.comentarios,
     )
     db.add(reporte)
-    await db.flush()
-    await db.refresh(reporte)
 
+    try:
+        await db.flush()
+    except sa_exc.IntegrityError:
+        # Condición de carrera: dos requests simultáneos con el mismo (device_id, local_id).
+        # El índice único rechazó el segundo INSERT — rollback y devolver el existente.
+        await db.rollback()
+        if data.device_id and data.local_id:
+            result = await db.execute(
+                select(Reporte).where(
+                    and_(
+                        Reporte.device_id == data.device_id,
+                        Reporte.local_id == data.local_id,
+                    )
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                return ApiResponse(data=ReporteResponse.model_validate(existing))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al crear el reporte. Intenta de nuevo.",
+        )
+
+    await db.refresh(reporte)
     return ApiResponse(data=ReporteResponse.model_validate(reporte))
 
 
@@ -165,7 +240,6 @@ async def alertas_zona(
 ):
     desde = datetime.now(timezone.utc) - timedelta(days=30)
 
-    # Agrupa reportes por departamento/provincia del usuario que los reportó
     stmt = (
         select(
             Usuario.departamento,
@@ -212,7 +286,6 @@ async def alertas_zona(
             )
         )
 
-    # Mi zona siempre primero, luego por volumen descendente
     alertas.sort(key=lambda a: (not a.es_mi_zona, -a.total_reportes))
 
     return AlertasZonaResponse(
@@ -236,10 +309,7 @@ async def obtener_reporte(
     result = await db.execute(select(Reporte).where(Reporte.id == reporte_id))
     reporte = result.scalar_one_or_none()
     if not reporte:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reporte no encontrado.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
     return ApiResponse(data=ReporteResponse.model_validate(reporte))
 
 
@@ -259,20 +329,11 @@ async def cancelar_reporte(
     reporte = result.scalar_one_or_none()
 
     if not reporte:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reporte no encontrado.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
     if reporte.usuario_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para cancelar este reporte.",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permiso para cancelar este reporte.")
     if reporte.estado not in (EstadoReporteEnum.ENVIADO, EstadoReporteEnum.ENVIADO.value):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Solo se pueden cancelar reportes en estado 'enviado'.",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solo se pueden cancelar reportes en estado 'enviado'.")
 
     reporte.estado = EstadoReporteEnum.CANCELADO.value
     await db.flush()
@@ -297,10 +358,7 @@ async def actualizar_estado(
     result = await db.execute(select(Reporte).where(Reporte.id == reporte_id))
     reporte = result.scalar_one_or_none()
     if not reporte:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reporte no encontrado.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
     if data.estado is not None:
         reporte.estado = data.estado.value
     await db.flush()

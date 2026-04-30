@@ -2,6 +2,7 @@
 import { useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { authService } from '../services/auth';
+import { registrarPushToken } from '../services/notifications';
 import { useAuthContext } from '../store/auth-context';
 import type { LoginPayload, RegisterPayload, UpdatePerfilPayload, CambiarPasswordPayload } from '../types';
 
@@ -13,6 +14,7 @@ export function useAuth() {
     onSuccess: (data) => {
       setUsuario(data.usuario);
       setIsAuthenticated(true);
+      registrarPushToken();
     },
   });
 

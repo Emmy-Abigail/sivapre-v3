@@ -1,10 +1,16 @@
+import os
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.limiter import limiter
 
 app = FastAPI(
     title="SIVAPRE API",
@@ -18,9 +24,11 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
+# ─── Rate limiting ────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # ─── CORS ─────────────────────────────────────────────────────────────────────
-# Bearer tokens no usan cookies → allow_credentials=False permite allow_origins=["*"]
-# En producción definir ALLOWED_ORIGINS en las variables de entorno
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -29,11 +37,13 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
+# ─── Archivos estáticos (fotos de reportes) ───────────────────────────────────
+# Crea la carpeta si no existe (primera vez que arranca el servidor).
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
 
 # ─── Manejo de errores de validación ─────────────────────────────────────────
-# Convierte los errores 422 de FastAPI al formato ApiError que espera el frontend:
-# { "mensaje": "...", "errores": { "campo": ["error"] } }
-
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_: Request, exc: RequestValidationError):
     errores: dict[str, list[str]] = {}

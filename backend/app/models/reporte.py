@@ -1,5 +1,3 @@
-# backend - app - models - reporte.py
-
 import uuid
 from datetime import datetime
 
@@ -20,6 +18,15 @@ class Reporte(Base):
     usuario_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="CASCADE"), index=True
     )
+
+    # ─── Idempotencia (reportes offline) ─────────────────────────────────────
+    # La app genera device_id una sola vez (AsyncStorage) y local_id por reporte.
+    # El backend usa (device_id, local_id) para detectar duplicados y devolver
+    # el reporte existente sin error cuando la app reintenta el envío.
+    # Ambos son nullable para mantener compatibilidad con reportes creados antes
+    # de implementar offline-first. El índice único parcial en la BD excluye NULLs.
+    device_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    local_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Coordenadas planas (para consultas rápidas sin PostGIS)
     latitud: Mapped[float] = mapped_column(Float)
