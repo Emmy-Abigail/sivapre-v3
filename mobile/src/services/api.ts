@@ -5,7 +5,7 @@ import { storage, StorageKeys } from '../store/storage';
 
 // Cambia esta URL por la IP/dominio real del backend en cada entorno
 export const BASE_URL = __DEV__
-  ? 'http://172.28.19.126:8000/api/v1'
+  ? 'http://192.168.18.29:8000/api/v1'
   : 'https://api.sivapre.gob/api/v1';
 
 export const api = axios.create({
