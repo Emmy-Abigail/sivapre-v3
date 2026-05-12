@@ -24,7 +24,7 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kandace-noninfecting-untextually.ngrok-free.dev/api/v1"
+        "EXPO_PUBLIC_API_URL": "http://161.132.53.226:8000/api/v1"
       }
     },
     "production": {

@@ -27,7 +27,8 @@
         "foregroundImage": "./assets/sivapre-logo.png",
         "backgroundColor": "#0F6E56"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/sivapre-logo.png"
