@@ -18,6 +18,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { useAuth } from '../hooks/useAuth';
 import { storage, StorageKeys } from '../store/storage';
+import HOSPITALES_DATA from '../data/hospitales.json';
 import type { MainStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Perfil'>;
@@ -37,19 +38,6 @@ interface CentroConDistancia extends CentroSalud {
   distanciaKm: number;
 }
 
-// Fallback offline: hospitales principales de Lima y Callao.
-// Se usa solo si la consulta a OpenStreetMap falla o no devuelve resultados.
-const CENTROS_FALLBACK: CentroSalud[] = [
-  { nombre: 'Hospital Nacional Daniel A. Carrión', telefono: '(01) 453-0300', direccion: 'Bellavista, Callao',        lat: -12.0635, lng: -77.1359, maps: 'https://maps.google.com/?q=-12.0635,-77.1359' },
-  { nombre: 'Hospital San José',                   telefono: '(01) 452-9900', direccion: 'Callao',                    lat: -12.0512, lng: -77.1226, maps: 'https://maps.google.com/?q=-12.0512,-77.1226' },
-  { nombre: 'Hospital Nacional Dos de Mayo',        telefono: '(01) 328-0032', direccion: 'Cercado de Lima',          lat: -12.0540, lng: -77.0290, maps: 'https://maps.google.com/?q=-12.054,-77.029'   },
-  { nombre: 'Hospital Nacional Arzobispo Loayza',  telefono: '(01) 613-6000', direccion: 'Cercado de Lima',          lat: -12.0480, lng: -77.0420, maps: 'https://maps.google.com/?q=-12.048,-77.042'   },
-  { nombre: 'Hospital Nacional Cayetano Heredia',  telefono: '(01) 482-0400', direccion: 'SMP, Lima',                lat: -12.0140, lng: -77.0520, maps: 'https://maps.google.com/?q=-12.014,-77.052'   },
-  { nombre: 'Hospital María Auxiliadora',          telefono: '(01) 217-8900', direccion: 'SJM, Lima',                lat: -12.1650, lng: -76.9750, maps: 'https://maps.google.com/?q=-12.165,-76.975'   },
-  { nombre: 'Hospital Sergio E. Bernales',         telefono: '(01) 556-2040', direccion: 'Comas, Lima',              lat: -11.9410, lng: -77.0410, maps: 'https://maps.google.com/?q=-11.941,-77.041'   },
-  { nombre: 'Hospital de Emergencias Grau',        telefono: '(01) 471-0840', direccion: 'La Victoria, Lima',        lat: -12.0590, lng: -77.0260, maps: 'https://maps.google.com/?q=-12.059,-77.026'   },
-];
-
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const toRad = (x: number) => (x * Math.PI) / 180;
@@ -61,47 +49,21 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Consulta OpenStreetMap (Overpass API) — funciona en cualquier ciudad del Perú.
-// Busca hospitales en un radio de 15 km. Si falla, se usa CENTROS_FALLBACK.
-async function buscarHospitalesCercanos(lat: number, lng: number): Promise<CentroConDistancia[]> {
-  const query = encodeURIComponent(
-    `[out:json][timeout:10];(node["amenity"="hospital"](around:15000,${lat},${lng});way["amenity"="hospital"](around:15000,${lat},${lng}););out center 15;`,
-  );
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
-
-  const res = await fetch(`https://overpass-api.de/api/interpreter?data=${query}`, {
-    signal: controller.signal,
-  });
-  clearTimeout(timer);
-
-  const json = await res.json();
-
-  const centros: CentroConDistancia[] = (json.elements ?? [])
-    .filter((el: any) => el.tags?.name)
-    .map((el: any) => {
-      const elLat: number = el.lat ?? el.center?.lat;
-      const elLng: number = el.lon ?? el.center?.lon;
-      const direccion =
-        [el.tags['addr:street'], el.tags['addr:housenumber'], el.tags['addr:city']]
-          .filter(Boolean)
-          .join(' ')
-          .trim() || el.tags['addr:city'] || '';
-      return {
-        nombre:       el.tags.name as string,
-        telefono:     (el.tags.phone ?? el.tags['contact:phone'] ?? '') as string,
-        direccion,
-        lat:          elLat,
-        lng:          elLng,
-        maps:         `https://maps.google.com/?q=${elLat},${elLng}`,
-        distanciaKm:  haversineKm(lat, lng, elLat, elLng),
-      };
-    })
-    .sort((a: CentroConDistancia, b: CentroConDistancia) => a.distanciaKm - b.distanciaKm)
+// 617 hospitales de todo el Perú — funciona 100% offline usando GPS.
+// Datos: OpenStreetMap (mayo 2026). Claves abreviadas para reducir tamaño.
+function buscarTresMasCercanos(lat: number, lng: number): CentroConDistancia[] {
+  return (HOSPITALES_DATA as Array<{ n: string; t: string; d: string; a: number; o: number }>)
+    .map((h) => ({
+      nombre:      h.n,
+      telefono:    h.t,
+      direccion:   h.d,
+      lat:         h.a,
+      lng:         h.o,
+      maps:        `https://maps.google.com/?q=${h.a},${h.o}`,
+      distanciaKm: haversineKm(lat, lng, h.a, h.o),
+    }))
+    .sort((a, b) => a.distanciaKm - b.distanciaKm)
     .slice(0, 3);
-
-  return centros;
 }
 
 // ─── Componente de fila de ajuste ─────────────────────────────────────────────
@@ -199,23 +161,7 @@ export default function PerfilScreen({ navigation }: Props) {
       }
 
       const { latitude, longitude } = location.coords;
-
-      let resultados: CentroConDistancia[] = [];
-      try {
-        resultados = await buscarHospitalesCercanos(latitude, longitude);
-      } catch {
-        // Sin conexión o API caída — usar lista local
-      }
-
-      // Si la API no devolvió resultados, usar fallback offline
-      if (resultados.length === 0) {
-        resultados = CENTROS_FALLBACK
-          .map((c) => ({ ...c, distanciaKm: haversineKm(latitude, longitude, c.lat, c.lng) }))
-          .sort((a, b) => a.distanciaKm - b.distanciaKm)
-          .slice(0, 3);
-      }
-
-      setCentrosCercanos(resultados);
+      setCentrosCercanos(buscarTresMasCercanos(latitude, longitude));
     } catch (err: any) {
       if (err?.message === 'timeout') {
         Alert.alert(
