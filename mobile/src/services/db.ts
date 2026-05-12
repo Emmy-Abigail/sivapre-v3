@@ -35,10 +35,14 @@ export interface PendingReport {
   retry_count: number;
 }
 
-const db = SQLite.openDatabaseSync('sivapre.db');
+let _db: SQLite.SQLiteDatabase | null = null;
+function getDb(): SQLite.SQLiteDatabase {
+  if (!_db) _db = SQLite.openDatabaseSync('sivapre.db');
+  return _db;
+}
 
 export function initDb(): void {
-  db.execSync(`
+  getDb().execSync(`
     CREATE TABLE IF NOT EXISTS pending_reports (
       id                          INTEGER PRIMARY KEY AUTOINCREMENT,
       local_id                    TEXT    NOT NULL UNIQUE,
@@ -68,7 +72,7 @@ export function initDb(): void {
 
   // Records stuck in 'enviando' mean the app crashed mid-sync. Reset them so
   // they are picked up on the next sync instead of being silently abandoned.
-  db.runSync(
+  getDb().runSync(
     `UPDATE pending_reports SET estado = 'pendiente', updated_at = ? WHERE estado = 'enviando'`,
     [new Date().toISOString()],
   );
@@ -90,7 +94,7 @@ export function insertPendingReport(report: {
   comentarios: string | null;
 }): void {
   const now = new Date().toISOString();
-  db.runSync(
+  getDb().runSync(
     `INSERT OR IGNORE INTO pending_reports
        (local_id, device_id, latitud, longitud, direccion, foto_local_uri, foto_url,
         tipo_lugar, tipo_objeto, observa_larvas, conocimiento_dengue_cercano,
@@ -116,7 +120,7 @@ export function insertPendingReport(report: {
 
 export function markAsSending(id: number): void {
   const now = new Date().toISOString();
-  db.runSync(
+  getDb().runSync(
     `UPDATE pending_reports
      SET estado = 'enviando', updated_at = ?, last_sync_attempt = ?
      WHERE id = ?`,
@@ -125,7 +129,7 @@ export function markAsSending(id: number): void {
 }
 
 export function markAsSent(id: number, httpStatus: number, serverResponse: string): void {
-  db.runSync(
+  getDb().runSync(
     `UPDATE pending_reports
      SET estado = 'enviado', updated_at = ?, http_status = ?, server_response = ?
      WHERE id = ?`,
@@ -139,7 +143,7 @@ export function markAsFailed(
   serverResponse: string | null,
 ): void {
   const now = new Date().toISOString();
-  db.runSync(
+  getDb().runSync(
     `UPDATE pending_reports
      SET estado = 'fallido', updated_at = ?, last_sync_attempt = ?,
          http_status = ?, server_response = ?, retry_count = retry_count + 1
@@ -149,7 +153,7 @@ export function markAsFailed(
 }
 
 export function updateFotoUrl(localId: string, fotoUrl: string): void {
-  db.runSync(
+  getDb().runSync(
     `UPDATE pending_reports SET foto_url = ?, updated_at = ? WHERE local_id = ?`,
     [fotoUrl, new Date().toISOString(), localId],
   );
@@ -165,7 +169,7 @@ export function updateFotoUrl(localId: string, fotoUrl: string): void {
 export const MAX_RETRY_COUNT = 10;
 
 export function getPendingAndFailedReports(): PendingReport[] {
-  return db.getAllSync<PendingReport>(
+  return getDb().getAllSync<PendingReport>(
     `SELECT * FROM pending_reports
      WHERE estado IN ('pendiente', 'fallido')
        AND retry_count < ?
@@ -178,7 +182,7 @@ export function getPendingAndFailedReports(): PendingReport[] {
 
 export function cleanOldSentReports(daysOld = 7): void {
   const cutoff = new Date(Date.now() - daysOld * 86_400_000).toISOString();
-  db.runSync(
+  getDb().runSync(
     `DELETE FROM pending_reports WHERE estado = 'enviado' AND updated_at < ?`,
     [cutoff],
   );
