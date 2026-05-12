@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/sivapre-logo.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/sivapre-logo.png",
       "resizeMode": "contain",
