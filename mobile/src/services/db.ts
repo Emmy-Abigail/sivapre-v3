@@ -65,10 +65,16 @@ export function initDb(): void {
       server_response             TEXT,
       retry_count                 INTEGER NOT NULL DEFAULT 0
     );
-    -- Migración en caliente: agrega la columna si no existe (para installs
-    -- previas que ya tienen la tabla sin el campo direccion).
-    ALTER TABLE pending_reports ADD COLUMN IF NOT EXISTS direccion TEXT;
   `);
+
+  // Migration for installs that predate the 'direccion' column.
+  // ALTER TABLE ADD COLUMN IF NOT EXISTS requires SQLite 3.35+ which is not
+  // guaranteed across all environments — try/catch is the safe alternative.
+  try {
+    getDb().execSync(`ALTER TABLE pending_reports ADD COLUMN direccion TEXT`);
+  } catch {
+    // Column already exists — safe to ignore.
+  }
 
   // Records stuck in 'enviando' mean the app crashed mid-sync. Reset them so
   // they are picked up on the next sync instead of being silently abandoned.
