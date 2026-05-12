@@ -18,7 +18,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../theme';
 import { useAuth } from '../hooks/useAuth';
 import { storage, StorageKeys } from '../store/storage';
-import HOSPITALES_DATA from '../data/hospitales.json';
 import type { MainStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Perfil'>;
@@ -49,10 +48,14 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+type HospitalEntry = { n: string; t: string; d: string; a: number; o: number };
+
 // 617 hospitales de todo el Perú — funciona 100% offline usando GPS.
 // Datos: OpenStreetMap (mayo 2026). Claves abreviadas para reducir tamaño.
 function buscarTresMasCercanos(lat: number, lng: number): CentroConDistancia[] {
-  return (HOSPITALES_DATA as Array<{ n: string; t: string; d: string; a: number; o: number }>)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const data: HospitalEntry[] = require('../data/hospitales.json');
+  return data
     .map((h) => ({
       nombre:      h.n,
       telefono:    h.t,

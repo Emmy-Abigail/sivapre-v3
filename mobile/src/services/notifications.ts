@@ -1,12 +1,12 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 
 // Remote push notifications were removed from Expo Go in SDK 53.
 // Running in a development build or standalone app is required.
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 export function initNotificationHandler(): void {
   if (isExpoGo) return;
