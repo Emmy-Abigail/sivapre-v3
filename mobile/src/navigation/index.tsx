@@ -43,6 +43,7 @@ const MainTab = createBottomTabNavigator<MainTabParamList>();
 function AuthNavigator() {
   return (
     <AuthStack.Navigator
+      id="AuthStack"
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
@@ -98,6 +99,7 @@ function TabNavigator() {
 
   return (
     <MainTab.Navigator
+      id="MainTab"
       screenOptions={({ route }) => {
         const config = TAB_CONFIG[route.name as keyof MainTabParamList];
         return {
@@ -161,7 +163,7 @@ function TabNavigator() {
 
 function MainNavigator() {
   return (
-    <MainStack.Navigator screenOptions={{ headerShown: false }}>
+    <MainStack.Navigator id="MainStack" screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="Tabs" component={TabNavigator} />
       <MainStack.Screen
         name="ReporteDetalle"
@@ -194,6 +196,7 @@ export default function RootNavigator() {
 
   return (
     <RootStack.Navigator
+      id="RootStack"
       screenOptions={{
         headerShown: false,
         animation: 'fade',

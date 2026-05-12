@@ -68,7 +68,7 @@ export const darkColors = {
   shadow: 'rgba(46, 204, 154, 0.15)',
 } as const;
 
-export type AppColors = typeof lightColors;
+export type AppColors = typeof lightColors | typeof darkColors;
 
 export const Colors = {
   light: lightColors,

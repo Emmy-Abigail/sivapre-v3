@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Lista de orígenes permitidos para el dashboard web.
     # La app móvil no usa CORS (cliente nativo), solo el navegador del dashboard.
     # En producción: ["http://IP_VPS:3000"] o ["https://dashboard.tudominio.com"]
-    ALLOWED_ORIGINS: list[str] = ["*"]
+    ALLOWED_ORIGINS: list[str] = []
 
     model_config = SettingsConfigDict(
         env_file=".env",
