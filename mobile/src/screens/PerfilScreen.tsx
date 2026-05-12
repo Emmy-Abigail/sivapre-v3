@@ -26,6 +26,32 @@ type Props = NativeStackScreenProps<MainStackParamList, 'Perfil'>;
 // En producción se consultarán desde un endpoint con PostGIS
 
 const CENTROS_SALUD = [
+  // ── Callao ────────────────────────────────────────────────────────────────
+  {
+    nombre: 'Hospital Nacional Daniel A. Carrión',
+    telefono: '(01) 453-0300',
+    direccion: 'Av. Guardia Chalaca 175, Bellavista, Callao',
+    lat: -12.0635,
+    lng: -77.1359,
+    maps: 'https://maps.google.com/?q=-12.0635,-77.1359',
+  },
+  {
+    nombre: 'Hospital San José',
+    telefono: '(01) 452-9900',
+    direccion: 'Jr. Huáscar 161, Callao',
+    lat: -12.0512,
+    lng: -77.1226,
+    maps: 'https://maps.google.com/?q=-12.0512,-77.1226',
+  },
+  {
+    nombre: 'Hospital de Ventanilla',
+    telefono: '(01) 576-0070',
+    direccion: 'Av. Pedro Beltrán s/n, Ventanilla, Callao',
+    lat: -11.8826,
+    lng: -77.1396,
+    maps: 'https://maps.google.com/?q=-11.8826,-77.1396',
+  },
+  // ── Lima Centro ───────────────────────────────────────────────────────────
   {
     nombre: 'Hospital Nacional Dos de Mayo',
     telefono: '(01) 328-0032',
@@ -43,20 +69,21 @@ const CENTROS_SALUD = [
     maps: 'https://maps.google.com/?q=-12.048,-77.042',
   },
   {
+    nombre: 'Hospital de Emergencias Grau (EsSalud)',
+    telefono: '(01) 471-0840',
+    direccion: 'Av. Grau 650, La Victoria',
+    lat: -12.0590,
+    lng: -77.0260,
+    maps: 'https://maps.google.com/?q=-12.059,-77.026',
+  },
+  // ── Lima Norte ────────────────────────────────────────────────────────────
+  {
     nombre: 'Hospital Nacional Cayetano Heredia',
     telefono: '(01) 482-0400',
     direccion: 'Av. Honorio Delgado 262, SMP',
     lat: -12.0140,
     lng: -77.0520,
     maps: 'https://maps.google.com/?q=-12.014,-77.052',
-  },
-  {
-    nombre: 'Hospital María Auxiliadora',
-    telefono: '(01) 217-8900',
-    direccion: 'Av. Miguel Iglesias s/n, SJM',
-    lat: -12.1650,
-    lng: -76.9750,
-    maps: 'https://maps.google.com/?q=-12.165,-76.975',
   },
   {
     nombre: 'Hospital Sergio E. Bernales',
@@ -66,13 +93,14 @@ const CENTROS_SALUD = [
     lng: -77.0410,
     maps: 'https://maps.google.com/?q=-11.941,-77.041',
   },
+  // ── Lima Sur ──────────────────────────────────────────────────────────────
   {
-    nombre: 'Hospital de Emergencias Grau (EsSalud)',
-    telefono: '(01) 471-0840',
-    direccion: 'Av. Grau 650, La Victoria',
-    lat: -12.0590,
-    lng: -77.0260,
-    maps: 'https://maps.google.com/?q=-12.059,-77.026',
+    nombre: 'Hospital María Auxiliadora',
+    telefono: '(01) 217-8900',
+    direccion: 'Av. Miguel Iglesias s/n, SJM',
+    lat: -12.1650,
+    lng: -76.9750,
+    maps: 'https://maps.google.com/?q=-12.165,-76.975',
   },
 ];
 
