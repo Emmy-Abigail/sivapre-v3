@@ -36,14 +36,6 @@
     "plugins": [
       "expo-font",
       [
-        "expo-notifications",
-        {
-          "icon": "./assets/sivapre-logo.png",
-          "color": "#0F6E56",
-          "defaultChannel": "reportes"
-        }
-      ],
-      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0F6E56",
