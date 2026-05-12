@@ -8,16 +8,21 @@ import { api } from './api';
 // Running in a development build or standalone app is required.
 const isExpoGo = Constants.appOwnership === 'expo';
 
-if (!isExpoGo) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+export function initNotificationHandler(): void {
+  if (isExpoGo) return;
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {
+    // expo-notifications no disponible (sin plugin configurado)
+  }
 }
 
 export async function registrarPushToken(): Promise<void> {

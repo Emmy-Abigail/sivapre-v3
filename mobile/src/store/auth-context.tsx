@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { storage, StorageKeys } from './storage';
 import { setUnauthorizedHandler } from './auth-signal';
 import { authService } from '../services/auth';
-import { registrarPushToken } from '../services/notifications';
+import { registrarPushToken, initNotificationHandler } from '../services/notifications';
 import { initDb } from '../services/db';
 import { startSyncListeners, stopSyncListeners, registerBackgroundSync, syncPendingReports } from '../services/sync';
 import type { Usuario } from '../types';
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   setUsuarioRef.current = setUsuario;
 
   useEffect(() => {
-    // Initialize SQLite schema once at startup (synchronous, idempotent).
+    initNotificationHandler();
     initDb();
 
     (async () => {
