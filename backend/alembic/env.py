@@ -26,7 +26,8 @@ if config.config_file_name is not None:
 SYNC_DATABASE_URL = settings.DATABASE_URL.replace(
     "postgresql+asyncpg", "postgresql+psycopg2"
 )
-config.set_main_option("sqlalchemy.url", SYNC_DATABASE_URL)
+# configparser usa % como interpolación — escapar para evitar ValueError con contraseñas que contengan %
+config.set_main_option("sqlalchemy.url", SYNC_DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
