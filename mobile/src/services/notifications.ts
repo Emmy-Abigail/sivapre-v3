@@ -1,24 +1,28 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 
-// Cómo mostrar notificaciones cuando la app está en primer plano
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Remote push notifications were removed from Expo Go in SDK 53.
+// Running in a development build or standalone app is required.
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export async function registrarPushToken(): Promise<void> {
-  // Solo funciona en dispositivos físicos
-  if (!Device.isDevice) return;
+  if (!Device.isDevice || isExpoGo) return;
 
-  // Crear canal para Android
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('reportes', {
       name: 'Estado de reportes',

@@ -21,16 +21,12 @@ bcrypt==4.2.1
 # HTTP client async (push notifications)
 httpx==0.28.1
 
-# Rate limiting — protección contra fuerza bruta en los endpoints de auth
+# Rate limiting (Redis backend — contadores compartidos entre workers)
 slowapi==0.1.9
+redis==5.2.1
 
-# Procesamiento de imágenes (compresión antes de guardar en disco)
+# Image processing
 Pillow==11.2.1
 
 # File uploads
 python-multipart==0.0.20
-
-# Cloudinary — DEPRECADO. Ya no se usa en el código principal.
-# El backend usa almacenamiento local (STORAGE_BACKEND=local).
-# Mantener aquí hasta que se confirme que no hay instancias apuntando a Cloudinary.
-cloudinary==1.41.0

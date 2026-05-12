@@ -1,4 +1,14 @@
-// ReportScreen
+// ReportScreen — offline-first
+//
+// Flow:
+//   1. Photo taken  → copied to app's documents dir (persistent local URI).
+//   2. Submit pressed → report inserted into SQLite (always succeeds locally).
+//   3. syncPendingReports() fired immediately (fire-and-forget):
+//        a. Uploads photo to backend storage if needed.
+//        b. POST /reportes — with or without photo URL.
+//        c. Marks SQLite record as 'enviado' on success, 'fallido' on error.
+//   4. If no network, SQLite record stays 'pendiente' and is retried
+//      automatically via NetInfo + AppState listeners in sync.ts.
 
 import React, { useRef, useState } from 'react';
 import {
@@ -14,6 +24,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
+import * as FileSystem from 'expo-file-system';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,8 +32,8 @@ import { useKeyboard } from '@react-native-community/hooks';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 
 import { useTheme } from '../theme';
-import { useCrearReporte } from '../hooks/useReportes';
-import { reportesService } from '../services/reportes';
+import { insertPendingReport } from '../services/db';
+import { syncPendingReports } from '../services/sync';
 import { storage, StorageKeys } from '../store/storage';
 import type {
   MainTabParamList,
@@ -108,7 +119,6 @@ export default function ReportScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboard();
-  const { mutateAsync: crearReporte, isPending } = useCrearReporte();
 
   // Estado del formulario
   const [tipoLugar, setTipoLugar] = useState<TipoLugar | null>(null);
@@ -117,39 +127,24 @@ export default function ReportScreen({ navigation }: Props) {
   const [dengue, setDengue] = useState<ConocimientoDengue | null>(null);
   const [comentarios, setComentarios] = useState('');
 
-  // Estado de foto — desacoplado del submit
-  // La foto se sube en paralelo mientras el usuario llena el formulario.
-  // Si falla, puede reintentar o continuar sin foto.
-  const [fotoUri, setFotoUri] = useState<string | null>(null);
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
-  const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const [fotoError, setFotoError] = useState(false);
+  // Foto — path local persistente (en documentDirectory). No se sube al tomar;
+  // la subida ocurre dentro del sync engine junto con el POST /reportes.
+  const [fotoLocalUri, setFotoLocalUri] = useState<string | null>(null);
 
   // Estado de ubicación
   const [latitud, setLatitud] = useState<number | null>(null);
   const [longitud, setLongitud] = useState<number | null>(null);
+  const [direccion, setDireccion] = useState<string | null>(null);
   const [obtenendoUbicacion, setObtenendoUbicacion] = useState(false);
 
-  // local_id se genera UNA vez al montar la pantalla (por sesión de formulario).
-  // Así, si el usuario pulsa Enviar dos veces rápido (o hay un reintento de red),
-  // ambos requests llevan el mismo local_id y el backend devuelve el mismo reporte.
+  // Enviando: true durante el insertPendingReport + disparo de sync.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // local_id único por sesión de formulario. Garantiza idempotencia si el usuario
+  // presiona Enviar dos veces o si el sync reintenta el mismo reporte.
   const localIdRef = useRef<string>(Crypto.randomUUID());
 
   // ─── Lógica de foto ──────────────────────────────────────────────────────────
-
-  const _subirFoto = async (uri: string) => {
-    setSubiendoFoto(true);
-    setFotoError(false);
-    try {
-      const url = await reportesService.subirFoto(uri);
-      setFotoUrl(url);
-    } catch {
-      setFotoError(true);
-      setFotoUrl(null);
-    } finally {
-      setSubiendoFoto(false);
-    }
-  };
 
   const tomarFoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -168,11 +163,19 @@ export default function ReportScreen({ navigation }: Props) {
     });
 
     if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri;
-      setFotoUri(uri);
-      // La subida comienza inmediatamente en paralelo con el llenado del formulario.
-      // Así el usuario no espera al presionar Enviar.
-      _subirFoto(uri);
+      const tempUri = result.assets[0].uri;
+      try {
+        // Copiar a un directorio persistente dentro de la app.
+        // ImagePicker devuelve URIs temporales que el SO puede limpiar.
+        const fotosDir = `${FileSystem.documentDirectory}sivapre_fotos/`;
+        await FileSystem.makeDirectoryAsync(fotosDir, { intermediates: true });
+        const destUri = `${fotosDir}${localIdRef.current}.jpg`;
+        await FileSystem.copyAsync({ from: tempUri, to: destUri });
+        setFotoLocalUri(destUri);
+      } catch {
+        // Si la copia falla (raro), usar la URI temporal como fallback.
+        setFotoLocalUri(tempUri);
+      }
     }
   };
 
@@ -191,8 +194,26 @@ export default function ReportScreen({ navigation }: Props) {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setLatitud(location.coords.latitude);
-      setLongitud(location.coords.longitude);
+      const { latitude, longitude } = location.coords;
+      setLatitud(latitude);
+      setLongitud(longitude);
+
+      // Geocodificación inversa: obtiene la dirección postal legible.
+      // Funciona offline en la mayoría de dispositivos (usa caché del SO).
+      // Si falla (sin caché, sin red), simplemente no se guarda la dirección.
+      try {
+        const [lugar] = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (lugar) {
+          const partes = [
+            lugar.street && lugar.streetNumber ? `${lugar.street} ${lugar.streetNumber}` : lugar.street,
+            lugar.district || lugar.subregion,
+            lugar.city || lugar.region,
+          ].filter(Boolean);
+          setDireccion(partes.join(', ') || null);
+        }
+      } catch {
+        // Geocodificación fallida — no es crítico, continúa sin dirección.
+      }
     } catch {
       Alert.alert('Error de GPS', 'No se pudo obtener la ubicación. Asegúrate de estar al aire libre e intenta de nuevo.');
     } finally {
@@ -208,12 +229,10 @@ export default function ReportScreen({ navigation }: Props) {
     setObservaLarvas(null);
     setDengue(null);
     setComentarios('');
-    setFotoUri(null);
-    setFotoUrl(null);
-    setFotoError(false);
+    setFotoLocalUri(null);
     setLatitud(null);
     setLongitud(null);
-    // Generar nuevo local_id para el próximo reporte
+    setDireccion(null);
     localIdRef.current = Crypto.randomUUID();
   };
 
@@ -226,67 +245,52 @@ export default function ReportScreen({ navigation }: Props) {
       Alert.alert('Campos incompletos', 'Completa todos los campos obligatorios.');
       return;
     }
-
-    // Si la foto falló, preguntar al usuario si desea continuar sin ella.
-    // Alert usa callbacks directos para mantener compatibilidad con el typing de RN.
-    if (fotoUri && fotoError) {
-      Alert.alert(
-        'Foto no subida',
-        'La foto no pudo enviarse por problemas de conexión. ¿Continuar sin foto?',
-        [
-          { text: 'Reintentar foto', onPress: () => _subirFoto(fotoUri) },
-          { text: 'Enviar sin foto', style: 'destructive', onPress: () => _doSubmit(null) },
-          { text: 'Cancelar', style: 'cancel' },
-        ],
-      );
-      return;
-    }
-
-    // Si la foto aún está subiendo, esperar o continuar sin ella.
-    if (subiendoFoto) {
-      Alert.alert(
-        'Foto en proceso',
-        'La foto se está subiendo. ¿Esperar o enviar el reporte ahora sin foto?',
-        [
-          { text: 'Esperar', style: 'cancel' },
-          { text: 'Enviar sin foto', onPress: () => _doSubmit(null) },
-        ],
-      );
-      return;
-    }
-
-    await _doSubmit(fotoUrl);
+    await _doSubmit();
   };
 
-  const _doSubmit = async (foto: string | null) => {
+  const _doSubmit = async () => {
+    setIsSubmitting(true);
     try {
       const deviceId = await _getOrCreateDeviceId();
 
-      await crearReporte({
+      // Insertar en SQLite — operación síncrona, nunca falla por red.
+      insertPendingReport({
+        local_id: localIdRef.current,
+        device_id: deviceId,
         latitud: latitud!,
         longitud: longitud!,
-        foto_url: foto ?? undefined,
+        direccion,
+        foto_local_uri: fotoLocalUri,
         tipo_lugar: tipoLugar!,
         tipo_objeto: tipoObjeto!,
         observa_larvas: observaLarvas!,
-        conocimiento_dengue_cercano: dengue ?? undefined,
-        comentarios: comentarios.trim() || undefined,
-        device_id: deviceId,
-        local_id: localIdRef.current,
+        conocimiento_dengue_cercano: dengue,
+        comentarios: comentarios.trim() || null,
       });
 
-      Alert.alert('¡Reporte enviado!', 'Gracias por ayudar a tu comunidad.', [
-        {
-          text: 'Ver mis reportes',
-          onPress: () => {
-            limpiarFormulario();
-            navigation.navigate('MyReports');
+      // Intentar sincronizar inmediatamente (fire-and-forget).
+      // Si hay señal, el reporte llega al servidor en segundos.
+      // Si no hay señal, los listeners de NetInfo/AppState lo reintentan.
+      syncPendingReports().catch(() => {});
+
+      Alert.alert(
+        'Reporte registrado',
+        'Tu reporte fue guardado y se enviará automáticamente al sistema cuando tengas conexión.',
+        [
+          {
+            text: 'Ver mis reportes',
+            onPress: () => {
+              limpiarFormulario();
+              navigation.navigate('MyReports');
+            },
           },
-        },
-        { text: 'Nuevo reporte', onPress: limpiarFormulario },
-      ]);
+          { text: 'Nuevo reporte', onPress: limpiarFormulario },
+        ],
+      );
     } catch (error: any) {
-      Alert.alert('Error', error?.message ?? 'No se pudo enviar el reporte. Intenta de nuevo.');
+      Alert.alert('Error', error?.message ?? 'No se pudo guardar el reporte. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -327,32 +331,13 @@ export default function ReportScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.photoBox,
-            { backgroundColor: colors.surface, borderColor: fotoError ? '#e53e3e' : colors.border },
+            { backgroundColor: colors.surface, borderColor: colors.border },
           ]}
           onPress={tomarFoto}
-          disabled={subiendoFoto || isPending}
+          disabled={isSubmitting}
         >
-          {fotoUri ? (
-            <View style={styles.photoPreviewContainer}>
-              <Image source={{ uri: fotoUri }} style={styles.photoPreview} />
-              {subiendoFoto && (
-                <View style={styles.photoOverlay}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.photoOverlayText}>Subiendo...</Text>
-                </View>
-              )}
-              {fotoError && !subiendoFoto && (
-                <View style={[styles.photoOverlay, { backgroundColor: 'rgba(229,62,62,0.75)' }]}>
-                  <Ionicons name="warning-outline" size={20} color="#fff" />
-                  <Text style={styles.photoOverlayText}>No se pudo subir</Text>
-                </View>
-              )}
-              {fotoUrl && !subiendoFoto && !fotoError && (
-                <View style={[styles.photoOverlay, { backgroundColor: 'rgba(56,161,105,0.6)' }]}>
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                </View>
-              )}
-            </View>
+          {fotoLocalUri ? (
+            <Image source={{ uri: fotoLocalUri }} style={styles.photoPreview} />
           ) : (
             <View style={styles.photoPlaceholder}>
               <Ionicons name="camera-outline" size={36} color={colors.textSecondary} />
@@ -363,25 +348,16 @@ export default function ReportScreen({ navigation }: Props) {
           )}
         </TouchableOpacity>
 
-        {fotoUri && (
+        {fotoLocalUri && (
           <View style={styles.photoActions}>
             <TouchableOpacity
               style={styles.photoActionBtn}
               onPress={tomarFoto}
-              disabled={subiendoFoto || isPending}
+              disabled={isSubmitting}
             >
               <Ionicons name="refresh-outline" size={15} color={colors.primary} />
               <Text style={[styles.photoActionText, { color: colors.primary }]}>Tomar otra</Text>
             </TouchableOpacity>
-            {fotoError && !subiendoFoto && (
-              <TouchableOpacity
-                style={styles.photoActionBtn}
-                onPress={() => _subirFoto(fotoUri)}
-              >
-                <Ionicons name="cloud-upload-outline" size={15} color={colors.primary} />
-                <Text style={[styles.photoActionText, { color: colors.primary }]}>Reintentar subida</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
@@ -399,7 +375,7 @@ export default function ReportScreen({ navigation }: Props) {
             },
           ]}
           onPress={obtenerUbicacion}
-          disabled={obtenendoUbicacion || isPending}
+          disabled={obtenendoUbicacion || isSubmitting}
         >
           {obtenendoUbicacion ? (
             <ActivityIndicator
@@ -429,21 +405,21 @@ export default function ReportScreen({ navigation }: Props) {
 
         {/* ── 3. Tipo de lugar ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>3. Tipo de lugar</Text>
-        <ChipGroup opciones={TIPOS_LUGAR} seleccionado={tipoLugar} onSelect={setTipoLugar} colors={colors} />
+        <ChipGroup opciones={TIPOS_LUGAR} seleccionado={tipoLugar} onSelect={(v) => setTipoLugar(v)} colors={colors} />
 
         {/* ── 4. Tipo de objeto ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>4. Tipo de objeto</Text>
-        <ChipGroup opciones={TIPOS_OBJETO} seleccionado={tipoObjeto} onSelect={setTipoObjeto} colors={colors} />
+        <ChipGroup opciones={TIPOS_OBJETO} seleccionado={tipoObjeto} onSelect={(v) => setTipoObjeto(v)} colors={colors} />
 
         {/* ── 5. Larvas ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>5. ¿Observas larvas?</Text>
-        <ChipGroup opciones={OPCIONES_LARVAS} seleccionado={observaLarvas} onSelect={setObservaLarvas} colors={colors} />
+        <ChipGroup opciones={OPCIONES_LARVAS} seleccionado={observaLarvas} onSelect={(v) => setObservaLarvas(v)} colors={colors} />
 
         {/* ── 6. Dengue cercano ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
           6. ¿Conoces casos de dengue cerca?
         </Text>
-        <ChipGroup opciones={OPCIONES_DENGUE} seleccionado={dengue} onSelect={setDengue} colors={colors} />
+        <ChipGroup opciones={OPCIONES_DENGUE} seleccionado={dengue} onSelect={(v) => setDengue(v)} colors={colors} />
 
         {/* ── 7. Comentarios ── */}
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
@@ -471,18 +447,18 @@ export default function ReportScreen({ navigation }: Props) {
           style={[
             styles.submitButton,
             { backgroundColor: colors.primary },
-            (!formularioValido || isPending) && { opacity: 0.6 },
+            (!formularioValido || isSubmitting) && { opacity: 0.6 },
           ]}
           onPress={handleSubmit}
-          disabled={!formularioValido || isPending}
+          disabled={!formularioValido || isSubmitting}
         >
-          {isPending ? (
+          {isSubmitting ? (
             <ActivityIndicator color={colors.textOnPrimary} size="small" />
           ) : (
             <Ionicons name="send-outline" size={18} color={colors.textOnPrimary} />
           )}
           <Text style={[styles.submitButtonText, { color: colors.textOnPrimary }]}>
-            {isPending ? 'ENVIANDO...' : 'ENVIAR REPORTE'}
+            {isSubmitting ? 'GUARDANDO...' : 'ENVIAR REPORTE'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -519,24 +495,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     overflow: 'hidden',
   },
-  photoPreviewContainer: {
-    flex: 1,
-  },
   photoPreview: {
     width: '100%',
     height: '100%',
-  },
-  photoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  photoOverlayText: {
-    color: '#fff',
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
   },
   photoPlaceholder: {
     flex: 1,

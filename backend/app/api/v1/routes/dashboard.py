@@ -4,12 +4,13 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_user, hash_password
 from app.services.notifications import enviar_notificacion_estado
+from app.models.audit_log import AuditLog
 from app.models.caso_netlab import CasoNetlab
 from app.models.caso_noti import CasoNoti
 from app.models.reporte import Reporte
@@ -128,7 +129,9 @@ async def get_kpis(
     nl_conds_pos = nl_conds + [CasoNetlab.dx_molecular_dengue == "Positivo"]
     r_larvas_conds = r_conds + [Reporte.observa_larvas == ObservaLarvasEnum.SI_CLARAMENTE.value]
 
-    base_r = select(func.count()).select_from(Reporte).join(Usuario, Reporte.usuario_id == Usuario.id)
+    # outerjoin (LEFT JOIN): incluye reportes donde usuario_id = NULL (ciudadano
+    # eliminó su cuenta). Con INNER JOIN esos reportes desaparecerían de los KPIs.
+    base_r = select(func.count()).select_from(Reporte).outerjoin(Usuario, Reporte.usuario_id == Usuario.id)
     base_n = select(func.count()).select_from(CasoNoti)
     base_nl = select(func.count()).select_from(CasoNetlab)
 
@@ -170,6 +173,7 @@ async def mapa_reportes(
             Reporte.estado,
             Reporte.foto_url,
             Reporte.comentarios,
+            Reporte.direccion,
             Reporte.fecha_reporte,
             Usuario.nombre.label("reporter_nombre"),
             Usuario.departamento.label("reporter_depto"),
@@ -177,7 +181,7 @@ async def mapa_reportes(
             Usuario.distrito.label("reporter_dist"),
         )
         .select_from(Reporte)
-        .join(Usuario, Reporte.usuario_id == Usuario.id)
+        .outerjoin(Usuario, Reporte.usuario_id == Usuario.id)
         .where(and_(*conds) if conds else True)
         .order_by(Reporte.fecha_reporte.desc())
         .limit(2000)
@@ -195,12 +199,13 @@ async def mapa_reportes(
             "estado": r.estado,
             "foto_url": r.foto_url,
             "comentarios": r.comentarios,
+            "direccion": r.direccion,
             "fecha_reporte": r.fecha_reporte.isoformat() if r.fecha_reporte else None,
             "reporter": {
-                "nombre": r.reporter_nombre,
-                "departamento": r.reporter_depto,
-                "provincia": r.reporter_prov,
-                "distrito": r.reporter_dist,
+                "nombre": r.reporter_nombre or "Usuario eliminado",
+                "departamento": r.reporter_depto or "—",
+                "provincia": r.reporter_prov or "—",
+                "distrito": r.reporter_dist or "—",
             },
         }
         for r in rows
@@ -292,12 +297,36 @@ async def mapa_netlab(
 
 @router.get("/feed", summary="Últimos reportes para el feed de acción")
 async def feed_reportes(
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(30, ge=1, le=100),
+    estado: str | None = Query(None, description="Filtrar por estado (None = todos)"),
     filtros: dict = Depends(filtros_comunes),
     db: AsyncSession = Depends(get_db),
     _: Usuario = Depends(get_staff_user),
 ):
     conds = _reporte_filtros(**filtros)
+    ESTADOS_VALIDOS = {"enviado", "en_revision", "resuelto", "rechazado", "cancelado"}
+    if estado and estado in ESTADOS_VALIDOS:
+        conds.append(Reporte.estado == estado)
+
+    # Subqueries correlacionadas: último cambio de estado por reporte.
+    # Para el feed de 30 items el costo es mínimo y evita un JOIN complejo.
+    last_actor_nombre_sq = (
+        select(AuditLog.actor_nombre)
+        .where(AuditLog.reporte_id == Reporte.id)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(1)
+        .correlate(Reporte)
+        .scalar_subquery()
+    )
+    last_actor_email_sq = (
+        select(AuditLog.actor_email)
+        .where(AuditLog.reporte_id == Reporte.id)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(1)
+        .correlate(Reporte)
+        .scalar_subquery()
+    )
+
     stmt = (
         select(
             Reporte.id,
@@ -310,6 +339,7 @@ async def feed_reportes(
             Reporte.foto_url,
             Reporte.latitud,
             Reporte.longitud,
+            Reporte.direccion,
             Reporte.fecha_reporte,
             Reporte.fecha_actualizacion,
             Usuario.nombre.label("reporter_nombre"),
@@ -317,9 +347,11 @@ async def feed_reportes(
             Usuario.departamento.label("reporter_depto"),
             Usuario.provincia.label("reporter_prov"),
             Usuario.distrito.label("reporter_dist"),
+            last_actor_nombre_sq.label("last_actor_nombre"),
+            last_actor_email_sq.label("last_actor_email"),
         )
         .select_from(Reporte)
-        .join(Usuario, Reporte.usuario_id == Usuario.id)
+        .outerjoin(Usuario, Reporte.usuario_id == Usuario.id)
         .where(and_(*conds) if conds else True)
         .order_by(Reporte.fecha_reporte.desc())
         .limit(limit)
@@ -338,15 +370,20 @@ async def feed_reportes(
             "foto_url": r.foto_url,
             "lat": r.latitud,
             "lng": r.longitud,
+            "direccion": r.direccion,
             "fecha_reporte": r.fecha_reporte.isoformat() if r.fecha_reporte else None,
             "fecha_actualizacion": r.fecha_actualizacion.isoformat() if r.fecha_actualizacion else None,
             "reporter": {
-                "nombre": r.reporter_nombre,
-                "email": r.reporter_email,
-                "departamento": r.reporter_depto,
-                "provincia": r.reporter_prov,
-                "distrito": r.reporter_dist,
+                "nombre": r.reporter_nombre or "Usuario eliminado",
+                "email": r.reporter_email or "—",
+                "departamento": r.reporter_depto or "—",
+                "provincia": r.reporter_prov or "—",
+                "distrito": r.reporter_dist or "—",
             },
+            "last_actor": {
+                "nombre": r.last_actor_nombre,
+                "email": r.last_actor_email,
+            } if r.last_actor_email else None,
         }
         for r in rows
     ]
@@ -367,17 +404,23 @@ async def tendencias(
     n_conds = _noti_filtros(**filtros)
     nl_conds = _netlab_filtros(**{**filtros, "fecha_desde": None})
 
+    # literal_column("'week'") evita que SQLAlchemy pase 'week' como parámetro
+    # ($1, $3, $4 distintos), lo que confunde a PostgreSQL al comparar las
+    # expresiones de SELECT, GROUP BY y ORDER BY entre sí.
+    _week = literal_column("'week'")
+
     # Reportes por semana
+    _semana_r = func.date_trunc(_week, Reporte.fecha_reporte)
     stmt_r = (
         select(
-            func.date_trunc("week", Reporte.fecha_reporte).label("semana"),
+            _semana_r.label("semana"),
             func.count(Reporte.id).label("total"),
         )
         .select_from(Reporte)
-        .join(Usuario, Reporte.usuario_id == Usuario.id)
+        .outerjoin(Usuario, Reporte.usuario_id == Usuario.id)
         .where(Reporte.fecha_reporte >= desde, *(r_conds))
-        .group_by(func.date_trunc("week", Reporte.fecha_reporte))
-        .order_by(func.date_trunc("week", Reporte.fecha_reporte))
+        .group_by(_semana_r)
+        .order_by(_semana_r)
     )
 
     # Casos NOTI por semana
@@ -394,9 +437,10 @@ async def tendencias(
     )
 
     # Casos NETLAB por semana
+    _semana_nl = func.date_trunc(_week, CasoNetlab.fecha_corte)
     stmt_nl = (
         select(
-            func.date_trunc("week", CasoNetlab.fecha_corte).label("semana"),
+            _semana_nl.label("semana"),
             func.count(CasoNetlab.id).label("total"),
         )
         .where(
@@ -404,8 +448,8 @@ async def tendencias(
             CasoNetlab.dx_molecular_dengue == "Positivo",
             *(nl_conds),
         )
-        .group_by(func.date_trunc("week", CasoNetlab.fecha_corte))
-        .order_by(func.date_trunc("week", CasoNetlab.fecha_corte))
+        .group_by(_semana_nl)
+        .order_by(_semana_nl)
     )
 
     rows_r = (await db.execute(stmt_r)).all()
@@ -435,11 +479,14 @@ async def actualizar_estado_dashboard(
     reporte_id: uuid.UUID,
     data: ReporteUpdate,
     db: AsyncSession = Depends(get_db),
-    _: Usuario = Depends(get_staff_user),
+    actor: Usuario = Depends(get_staff_user),
 ):
+    # outerjoin: permite actualizar el estado de reportes cuyos ciudadanos
+    # eliminaron su cuenta (usuario_id = NULL). Con inner join esos reportes
+    # serían invisibles para el dashboard y no se podrían gestionar.
     result = await db.execute(
         select(Reporte, Usuario)
-        .join(Usuario, Reporte.usuario_id == Usuario.id)
+        .outerjoin(Usuario, Reporte.usuario_id == Usuario.id)
         .where(Reporte.id == reporte_id)
     )
     row = result.first()
@@ -447,14 +494,27 @@ async def actualizar_estado_dashboard(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
 
     reporte, dueno = row
-    if data.estado is not None:
-        reporte.estado = data.estado.value
+    if data.estado is None:
+        return {"id": str(reporte.id), "estado": reporte.estado}
+
+    estado_anterior = reporte.estado
+    reporte.estado = data.estado.value
+
+    # Registro inmutable de auditoría — quién cambió qué y cuándo.
+    db.add(AuditLog(
+        reporte_id=reporte.id,
+        actor_id=actor.id,
+        actor_email=actor.email,
+        actor_nombre=actor.nombre,
+        estado_anterior=estado_anterior,
+        estado_nuevo=data.estado.value,
+    ))
 
     await db.flush()
     await db.refresh(reporte)
 
-    # Notificar al dueño del reporte si tiene push token
-    if dueno.push_token and data.estado is not None:
+    # Notificar al dueño sólo si existe y tiene push token registrado.
+    if dueno is not None and dueno.push_token:
         await enviar_notificacion_estado(
             dueno.push_token,
             data.estado.value,
@@ -462,6 +522,33 @@ async def actualizar_estado_dashboard(
         )
 
     return {"id": str(reporte.id), "estado": reporte.estado}
+
+
+@router.get(
+    "/reportes/{reporte_id}/historial",
+    summary="Historial de cambios de estado de un reporte",
+)
+async def historial_reporte(
+    reporte_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: Usuario = Depends(get_staff_user),
+):
+    result = await db.execute(
+        select(AuditLog)
+        .where(AuditLog.reporte_id == reporte_id)
+        .order_by(AuditLog.timestamp.asc())
+    )
+    logs = result.scalars().all()
+    return [
+        {
+            "id": str(log.id),
+            "actor_email": log.actor_email,
+            "estado_anterior": log.estado_anterior,
+            "estado_nuevo": log.estado_nuevo,
+            "timestamp": log.timestamp.isoformat(),
+        }
+        for log in logs
+    ]
 
 
 # ─── Ubicaciones únicas (para autocomplete de filtros) ────────────────────────

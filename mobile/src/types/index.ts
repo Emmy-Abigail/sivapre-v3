@@ -113,6 +113,7 @@ export interface CrearReportePayload {
   // local_id:  UUID único por reporte, generado en el momento de crearlo.
   device_id?: string;
   local_id?: string;
+  direccion?: string;
 }
 
 

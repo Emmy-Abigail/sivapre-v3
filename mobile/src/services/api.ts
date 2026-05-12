@@ -4,8 +4,17 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { storage, StorageKeys } from '../store/storage';
 import { triggerUnauthorized } from '../store/auth-signal';
 
-export const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://10.211.180.205:8000/api/v1';
+// EXPO_PUBLIC_API_URL se inyecta en tiempo de compilación por EAS (eas.json → env).
+// Si no está definida, la build está mal configurada — falla explícitamente
+// en lugar de conectarse silenciosamente a una IP de desarrollo que no existe.
+const _apiUrl = process.env.EXPO_PUBLIC_API_URL;
+if (!_apiUrl) {
+  throw new Error(
+    '[SIVAPRE] EXPO_PUBLIC_API_URL no está definida. ' +
+    'Revisa el perfil de EAS en eas.json o crea un archivo .env en mobile/.',
+  );
+}
+export const BASE_URL = _apiUrl;
 
 export const api = axios.create({
   baseURL: BASE_URL,

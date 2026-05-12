@@ -2,18 +2,19 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import and_, exc as sa_exc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.core.security import get_current_user
 from app.models.reporte import Reporte
 from app.models.usuario import Usuario
 from app.schemas.enums import EstadoReporteEnum
 from app.schemas.responses import ApiResponse, FotoResponse, PaginatedData
-from app.schemas.reporte import AlertaZona, AlertasZonaResponse, ReporteCreate, ReporteResponse, ReporteUpdate
+from app.schemas.reporte import AlertaZona, AlertasZonaResponse, ReporteCreate, ReporteResponse
 from app.services.storage import storage
 
 router = APIRouter(tags=["Reportes"])
@@ -118,7 +119,9 @@ async def subir_foto_reporte(
     status_code=status.HTTP_201_CREATED,
     summary="Crea un nuevo reporte de criadero (idempotente con device_id + local_id)",
 )
+@limiter.limit("30/minute")
 async def crear_reporte(
+    request: Request,  # requerido por slowapi para extraer la IP del cliente
     data: ReporteCreate,
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
@@ -158,6 +161,7 @@ async def crear_reporte(
         observa_larvas=data.observa_larvas,
         conocimiento_dengue_cercano=data.conocimiento_dengue_cercano,
         comentarios=data.comentarios,
+        direccion=data.direccion,
     )
     db.add(reporte)
 
@@ -342,26 +346,8 @@ async def cancelar_reporte(
     return ApiResponse(data=ReporteResponse.model_validate(reporte))
 
 
-# ─── Actualizar estado (inspector / admin) ────────────────────────────────────
-
-@router.patch(
-    "/{reporte_id}/estado",
-    response_model=ApiResponse[ReporteResponse],
-    summary="Actualiza el estado de un reporte (uso interno)",
-)
-async def actualizar_estado(
-    reporte_id: uuid.UUID,
-    data: ReporteUpdate,
-    db: AsyncSession = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
-):
-    result = await db.execute(select(Reporte).where(Reporte.id == reporte_id))
-    reporte = result.scalar_one_or_none()
-    if not reporte:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
-    if data.estado is not None:
-        reporte.estado = data.estado.value
-    await db.flush()
-    await db.refresh(reporte)
-
-    return ApiResponse(data=ReporteResponse.model_validate(reporte))
+# NOTA: El cambio de estado de un reporte lo gestiona exclusivamente el dashboard
+# a través de PATCH /api/v1/dashboard/reportes/{id}/estado, que verifica rol de
+# inspector/admin y envía notificación push al ciudadano. No existe un endpoint
+# equivalente en este router para evitar que ciudadanos cambien el estado de
+# reportes ajenos sin validación de rol.

@@ -38,6 +38,13 @@ export const reportesService = {
     return data.data;
   },
 
+  // Returns the raw axios response so the sync engine can record http_status
+  // and server_response for observability without catching them itself.
+  async crearRaw(payload: CrearReportePayload): Promise<{ status: number; data: unknown }> {
+    const resp = await api.post<ApiResponse<Reporte>>('/reportes', payload);
+    return { status: resp.status, data: resp.data };
+  },
+
   async listarMisReportes(pagina = 1, porPagina = 20): Promise<PaginatedResponse<Reporte>> {
     const { data } = await api.get<ApiResponse<PaginatedResponse<Reporte>>>(
       '/reportes/mis-reportes',

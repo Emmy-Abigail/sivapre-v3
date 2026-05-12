@@ -7,7 +7,8 @@ const keys = {
   mapaReportes: (f: Partial<Filtros>) => ['mapa-reportes', f] as const,
   mapaNoti: (f: Partial<Filtros>) => ['mapa-noti', f] as const,
   mapaNetlab: (f: Partial<Filtros>) => ['mapa-netlab', f] as const,
-  feed: (f: Partial<Filtros>) => ['feed', f] as const,
+  feed: (f: Partial<Filtros>, estado: string) => ['feed', f, estado] as const,
+  feedAlertas: () => ['feed-alertas'] as const,
   tendencias: (f: Partial<Filtros>) => ['tendencias', f] as const,
   ubicaciones: ['ubicaciones'] as const,
 };
@@ -46,11 +47,19 @@ export function useMapaNetlab(filtros: Partial<Filtros>) {
   });
 }
 
-export function useFeed(filtros: Partial<Filtros>) {
+export function useFeed(filtros: Partial<Filtros>, estado?: string, limit = 30) {
   return useQuery({
-    queryKey: keys.feed(filtros),
-    queryFn: () => dashboardApi.feed(filtros, 20),
+    queryKey: keys.feed(filtros, estado ?? 'todos'),
+    queryFn: () => dashboardApi.feed(filtros, limit, estado),
     refetchInterval: REFETCH_INTERVAL,
+  });
+}
+
+export function useFeedAlertas() {
+  return useQuery({
+    queryKey: keys.feedAlertas(),
+    queryFn: () => dashboardApi.feed({}, 50, 'enviado'),
+    refetchInterval: 30_000,
   });
 }
 

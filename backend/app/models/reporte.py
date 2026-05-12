@@ -15,8 +15,10 @@ class Reporte(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    usuario_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="CASCADE"), index=True
+    # nullable=True + SET NULL: si el ciudadano elimina su cuenta, el reporte
+    # queda huérfano (usuario_id=NULL) pero el evento epidemiológico NO se pierde.
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # ─── Idempotencia (reportes offline) ─────────────────────────────────────
@@ -45,6 +47,10 @@ class Reporte(Base):
         String(50), nullable=True
     )
     comentarios: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Dirección postal legible obtenida por geocodificación inversa en el
+    # dispositivo al momento de capturar el GPS (funciona sin internet en la
+    # mayoría de dispositivos). Null en reportes anteriores a esta funcionalidad.
+    direccion: Mapped[str | None] = mapped_column(String(400), nullable=True)
     estado: Mapped[str] = mapped_column(String(50), default="enviado")
     fecha_reporte: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -55,7 +61,7 @@ class Reporte(Base):
         onupdate=func.now(),
     )
 
-    # Relación con Usuario
-    usuario: Mapped["Usuario"] = relationship(
+    # Relación con Usuario — sin cascade ORM (el control de borrado está en la BD).
+    usuario: Mapped["Usuario | None"] = relationship(
         "Usuario", back_populates="reportes", lazy="select"
     )

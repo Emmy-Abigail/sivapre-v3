@@ -27,8 +27,10 @@ export const dashboardApi = {
   mapaNetlab: (f: Partial<Filtros>) =>
     api.get<NetlabMapa[]>('/dashboard/mapa/netlab', { params: toParams(f) }).then((r) => r.data),
 
-  feed: (f: Partial<Filtros>, limit = 20) =>
-    api.get<FeedItem[]>('/dashboard/feed', { params: { ...toParams(f), limit } }).then((r) => r.data),
+  feed: (f: Partial<Filtros>, limit = 30, estado?: string) =>
+    api.get<FeedItem[]>('/dashboard/feed', {
+      params: { ...toParams(f), limit, ...(estado ? { estado } : {}) },
+    }).then((r) => r.data),
 
   tendencias: (f: Partial<Filtros>) =>
     api.get<TendenciasData>('/dashboard/tendencias', { params: toParams(f) }).then((r) => r.data),

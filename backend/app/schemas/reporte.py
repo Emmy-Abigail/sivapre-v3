@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.enums import (
     ConocimientoDengueEnum,
@@ -17,7 +17,7 @@ class ReporteBase(BaseModel):
     tipo_objeto: TipoObjetoEnum
     observa_larvas: ObservaLarvasEnum
     conocimiento_dengue_cercano: ConocimientoDengueEnum | None = None
-    comentarios: str | None = None
+    comentarios: str | None = Field(None, max_length=1000)
 
 
 class ReporteCreate(ReporteBase):
@@ -32,11 +32,12 @@ class ReporteCreate(ReporteBase):
     # existente en lugar de crear un duplicado.
     device_id: str | None = Field(None, max_length=64)
     local_id: str | None = Field(None, max_length=64)
+    direccion: str | None = Field(None, max_length=400)
 
 
 class ReporteResponse(ReporteBase):
     id: uuid.UUID
-    usuario_id: uuid.UUID
+    usuario_id: uuid.UUID | None  # None cuando la cuenta del ciudadano fue eliminada
     latitud: float
     longitud: float
     foto_url: str | None

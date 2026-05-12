@@ -55,7 +55,7 @@ export default function SplashScreen() {
         <SivapreLogo size={ICON_SIZE} />
 
         {/* Nombre */}
-        <Text style={styles.appName}>SIVAPRE</Text>
+        <Text style={styles.appName}>Sivapre</Text>
 
         {/* Tagline */}
         <Text style={styles.tagline}>
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   appName: {
     fontFamily: 'Montserrat-ExtraBold',
     fontSize: 38,
-    letterSpacing: 8,
+    letterSpacing: 4,
     color: '#FFFFFF',
     marginTop: 24,
     marginBottom: 12,

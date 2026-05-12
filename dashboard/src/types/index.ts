@@ -15,6 +15,7 @@ export interface ReporteMapa {
   estado: string;
   foto_url: string | null;
   comentarios: string | null;
+  direccion: string | null;
   fecha_reporte: string;
   reporter: { nombre: string; departamento: string; provincia: string; distrito: string };
 }
@@ -47,9 +48,11 @@ export interface FeedItem {
   foto_url: string | null;
   lat: number;
   lng: number;
+  direccion: string | null;
   fecha_reporte: string;
   fecha_actualizacion: string;
   reporter: { nombre: string; email: string; departamento: string; provincia: string; distrito: string };
+  last_actor: { nombre: string | null; email: string } | null;
 }
 
 export interface TendenciasData {

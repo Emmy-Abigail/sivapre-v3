@@ -3,6 +3,8 @@ import { storage, StorageKeys } from './storage';
 import { setUnauthorizedHandler } from './auth-signal';
 import { authService } from '../services/auth';
 import { registrarPushToken } from '../services/notifications';
+import { initDb } from '../services/db';
+import { startSyncListeners, stopSyncListeners, registerBackgroundSync, syncPendingReports } from '../services/sync';
 import type { Usuario } from '../types';
 
 interface AuthContextValue {
@@ -58,6 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   setUsuarioRef.current = setUsuario;
 
   useEffect(() => {
+    // Initialize SQLite schema once at startup (synchronous, idempotent).
+    initDb();
+
     (async () => {
       const token = await storage.getItem(StorageKeys.AUTH_TOKEN);
 
@@ -87,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setIsAuthenticated(true);
         registrarPushToken();
+        startSyncListeners();
+        registerBackgroundSync();
+        syncPendingReports(); // flush any reports pending from a previous session
       }
 
       setLoading(false);
@@ -95,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUnauthorizedHandler(() => {
       setAuthRef.current(false);
       setUsuarioRef.current(null);
+      stopSyncListeners();
     });
   }, []);
 

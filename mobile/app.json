@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SIVAPRE",
+    "name": "Sivapre",
     "slug": "sivapre",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "pe.gob.sivapre",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch"]
+      }
     },
     "android": {
       "package": "pe.gob.sivapre",

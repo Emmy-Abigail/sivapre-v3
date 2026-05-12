@@ -8,26 +8,27 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Código fuente — hot-reload en desarrollo
-      - ./backend:/app
-      # Fotos de reportes — volumen nombrado para persistir entre reinicios y deployments.
-      # CRÍTICO: sin este volumen, las fotos se pierden con cada "docker restart" o redeploy,
-      # dejando foto_url en la BD apuntando a archivos inexistentes.
       - uploads_data:/app/uploads
     env_file:
       - ./backend/.env
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - sivapre-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   db:
     image: postgis/postgis:16-3.4
     container_name: sivapre_db
-    ports:
-      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sivapre}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sivapre_secret}
@@ -43,16 +44,31 @@ services:
       - sivapre-network
     restart: unless-stopped
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: sivapre_pgadmin
+  redis:
+    image: redis:7-alpine
+    container_name: sivapre_redis
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sivapre-network
+    restart: unless-stopped
+
+  dashboard:
+    image: nginx:alpine
+    container_name: sivapre_dashboard
     ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@sivapre.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      - "3000:80"
+    volumes:
+      - ./dashboard/dist:/usr/share/nginx/html:ro
+      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - db
+      - backend
     networks:
       - sivapre-network
     restart: unless-stopped
@@ -60,6 +76,7 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+  redis_data:
 
 networks:
   sivapre-network:
