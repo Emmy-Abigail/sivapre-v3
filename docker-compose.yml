@@ -29,9 +29,10 @@ services:
   db:
     image: postgis/postgis:16-3.4
     container_name: sivapre_db
+    env_file:
+      - ./backend/.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sivapre}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sivapre_secret}
       POSTGRES_DB: ${POSTGRES_DB:-sivapre_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
