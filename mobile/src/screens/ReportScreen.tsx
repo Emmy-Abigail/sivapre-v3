@@ -253,8 +253,8 @@ export default function ReportScreen({ navigation }: Props) {
     try {
       const deviceId = await _getOrCreateDeviceId();
 
-      // Insertar en SQLite — operación síncrona, nunca falla por red.
-      insertPendingReport({
+      // Insertar en SQLite — nunca falla por red.
+      await insertPendingReport({
         local_id: localIdRef.current,
         device_id: deviceId,
         latitud: latitud!,

@@ -96,7 +96,7 @@ export async function syncPendingReports(): Promise<void> {
             FileSystem.deleteAsync(report.foto_local_uri, { idempotent: true }).catch(() => {});
           }
         } else {
-          markAsFailed(report.id, httpStatus, body);
+          await markAsFailed(report.id, httpStatus, body);
         }
       }
     }

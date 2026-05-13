@@ -86,7 +86,7 @@ export function initDb(): void {
 
 // ─── Write operations ─────────────────────────────────────────────────────────
 
-export function insertPendingReport(report: {
+export async function insertPendingReport(report: {
   local_id: string;
   device_id: string;
   latitud: number;
@@ -98,9 +98,9 @@ export function insertPendingReport(report: {
   observa_larvas: ObservaLarvas;
   conocimiento_dengue_cercano: ConocimientoDengue | null;
   comentarios: string | null;
-}): void {
+}): Promise<void> {
   const now = new Date().toISOString();
-  getDb().runSync(
+  await getDb().runAsync(
     `INSERT OR IGNORE INTO pending_reports
        (local_id, device_id, latitud, longitud, direccion, foto_local_uri, foto_url,
         tipo_lugar, tipo_objeto, observa_larvas, conocimiento_dengue_cercano,
@@ -145,18 +145,18 @@ export function markAsSent(id: number, httpStatus: number, serverResponse: strin
   );
 }
 
-export function markAsFailed(
+export async function markAsFailed(
   id: number,
   httpStatus: number | null,
   serverResponse: string | null,
-): void {
+): Promise<void> {
   const now = new Date().toISOString();
-  getDb().runSync(
+  await getDb().runAsync(
     `UPDATE pending_reports
      SET estado = 'fallido', updated_at = ?, last_sync_attempt = ?,
          http_status = ?, server_response = ?, retry_count = retry_count + 1
      WHERE id = ?`,
-    [now, now, httpStatus, serverResponse, id],
+    [now, now, httpStatus ?? null, serverResponse ?? null, id],
   );
 }
 
