@@ -237,6 +237,10 @@ export default function ReportScreen({ navigation }: Props) {
   };
 
   const handleSubmit = async () => {
+    if (!fotoLocalUri) {
+      Alert.alert('Foto requerida', 'Toma una foto del criadero antes de enviar.');
+      return;
+    }
     if (!latitud || !longitud) {
       Alert.alert('Ubicación requerida', 'Captura tu ubicación GPS antes de enviar.');
       return;
@@ -295,7 +299,7 @@ export default function ReportScreen({ navigation }: Props) {
   };
 
   const ubicacionObtenida = latitud !== null && longitud !== null;
-  const formularioValido = ubicacionObtenida && tipoLugar && tipoObjeto && observaLarvas;
+  const formularioValido = fotoLocalUri && ubicacionObtenida && tipoLugar && tipoObjeto && observaLarvas;
 
   const paddingBottom = keyboard.keyboardShown
     ? keyboard.keyboardHeight + 24
@@ -321,12 +325,7 @@ export default function ReportScreen({ navigation }: Props) {
         </Text>
 
         {/* ── 1. Foto ── */}
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          1. Evidencia fotográfica{' '}
-          <Text style={{ color: colors.textSecondary, fontFamily: 'Inter-Regular', fontWeight: 'normal' }}>
-            (recomendada)
-          </Text>
-        </Text>
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>1. Evidencia fotográfica</Text>
 
         <TouchableOpacity
           style={[
