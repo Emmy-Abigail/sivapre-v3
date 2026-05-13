@@ -222,7 +222,7 @@ export default function MyReportsScreen({ navigation }: Props) {
                 : 'No hay reportes en esta categoría.'}
             </Text>
             {filtroActivo === 'Todos' && (
-              <TouchableOpacity onPress={() => navigation.navigate('Tabs')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Report')}>
                 <Text style={[styles.emptyLink, { color: colors.primary }]}>
                   Crear primer reporte
                 </Text>

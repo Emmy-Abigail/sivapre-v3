@@ -57,9 +57,12 @@ function useBrowserNotifications(alertas: FeedItem[] | undefined) {
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
+  // La Notification API del navegador requiere HTTPS (contexto seguro).
+  // En HTTP el navegador ignora requestPermission silenciosamente.
+  const isSecure = typeof window !== 'undefined' && window.isSecureContext;
 
   const requestPermission = async () => {
-    if (typeof Notification === 'undefined') return;
+    if (typeof Notification === 'undefined' || !isSecure) return;
     const result = await Notification.requestPermission();
     setPermission(result);
   };
@@ -97,7 +100,7 @@ function useBrowserNotifications(alertas: FeedItem[] | undefined) {
     prevIdsRef.current = currentIds;
   }, [alertas, permission]);
 
-  return { permission, requestPermission };
+  return { permission, requestPermission, isSecure };
 }
 
 // ─── Componente TopBar ─────────────────────────────────────────────────────────
@@ -108,7 +111,7 @@ export function TopBar({ title, subtitle }: TopBarProps) {
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
   const { data: alertasRaw } = useFeedAlertas();
-  const { permission, requestPermission } = useBrowserNotifications(alertasRaw);
+  const { permission, requestPermission, isSecure } = useBrowserNotifications(alertasRaw);
 
   const alertas = clasificarAlertas(alertasRaw ?? []);
   const criticas = alertas.filter((a) => a.prioridad === 'critica').length;
@@ -179,18 +182,21 @@ export function TopBar({ title, subtitle }: TopBarProps) {
                   <p className="text-sm font-black text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>
                     Alertas pendientes
                   </p>
-                  {permission !== 'granted' && (
+                  {permission === 'granted' ? (
+                    <span className="text-[10px] text-[#0F6E56] flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#0F6E56] animate-pulse" />
+                      Alertas activas
+                    </span>
+                  ) : isSecure ? (
                     <button
                       onClick={requestPermission}
                       className="text-[10px] font-semibold text-[#0F6E56] border border-[#0F6E56]/30 rounded-lg px-2 py-0.5 hover:bg-[#0F6E56]/5 transition-all"
                     >
                       Activar alertas del escritorio
                     </button>
-                  )}
-                  {permission === 'granted' && (
-                    <span className="text-[10px] text-[#0F6E56] flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#0F6E56] animate-pulse" />
-                      Alertas activas
+                  ) : (
+                    <span className="text-[10px] text-gray-400">
+                      Requiere HTTPS
                     </span>
                   )}
                 </div>
@@ -265,7 +271,9 @@ export function TopBar({ title, subtitle }: TopBarProps) {
               {alertas.length > 0 && (
                 <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50">
                   <p className="text-xs text-gray-400 text-center">
-                    {permission === 'denied'
+                    {!isSecure
+                      ? 'Las notificaciones de escritorio requieren HTTPS'
+                      : permission === 'denied'
                       ? 'Alertas de escritorio bloqueadas en el navegador'
                       : permission === 'granted'
                       ? 'Recibirás alertas de escritorio ante nuevos reportes con larvas'
