@@ -1,6 +1,6 @@
 # App Móvil — SIVAPRE
 
-Aplicación React Native (Expo SDK 54) para ciudadanos. Disponible para Android e iOS desde un solo código fuente.
+Aplicación Android para ciudadanos. Construida con React Native (Expo SDK 54). Permite reportar criaderos de mosquitos con foto y GPS, funciona completamente offline y sincroniza con el servidor cuando hay conexión.
 
 ---
 
@@ -8,26 +8,34 @@ Aplicación React Native (Expo SDK 54) para ciudadanos. Disponible para Android 
 
 1. [¿Qué puede hacer el usuario?](#1-qué-puede-hacer-el-usuario)
 2. [Estructura del proyecto](#2-estructura-del-proyecto)
-3. [Pantallas](#3-pantallas)
-4. [Navegación](#4-navegación)
-5. [Manejo del estado](#5-manejo-del-estado)
-6. [Llamadas al backend (servicios)](#6-llamadas-al-backend-servicios)
-7. [Notificaciones push](#7-notificaciones-push)
-8. [Temas y estilos](#8-temas-y-estilos)
-9. [Variables de entorno](#9-variables-de-entorno)
-10. [Cómo construir el APK](#10-cómo-construir-el-apk)
+3. [Navegación y pantallas](#3-navegación-y-pantallas)
+4. [Arquitectura offline-first](#4-arquitectura-offline-first)
+5. [Gestión del estado](#5-gestión-del-estado)
+6. [Comunicación con el backend](#6-comunicación-con-el-backend)
+7. [Hospitales offline](#7-hospitales-offline)
+8. [Notificaciones push](#8-notificaciones-push)
+9. [Temas y estilos](#9-temas-y-estilos)
+10. [Variables de entorno](#10-variables-de-entorno)
+11. [Construir el APK con EAS](#11-construir-el-apk-con-eas)
 
 ---
 
 ## 1. ¿Qué puede hacer el usuario?
 
-- **Registrarse e iniciar sesión** con email y contraseña
-- **Reportar criaderos de mosquitos**: toma una foto, el GPS registra la ubicación automáticamente, elige el tipo de lugar y objeto, y envía el reporte
-- **Ver sus reportes** anteriores con el estado actual (enviado, en revisión, resuelto...)
-- **Ver alertas de su zona**: los reportes más recientes de otros ciudadanos cercanos, ordenados por nivel de riesgo (Alto / Medio / Bajo)
-- **Editar su perfil**: nombre, teléfono y ubicación (departamento/provincia/distrito)
+- **Registrarse** con nombre, email, contraseña y ubicación (departamento/provincia/distrito)
+- **Iniciar sesión** y mantener la sesión activa hasta 30 días sin necesidad de volver a loguear
+- **Reportar un criadero de mosquitos**:
+  - Toma una foto obligatoria con la cámara
+  - Captura su ubicación GPS (obligatorio) con dirección postal automática
+  - Elige el tipo de lugar, tipo de objeto, si observa larvas y si conoce casos de dengue cerca
+  - Agrega comentarios opcionales
+  - El reporte se guarda localmente aunque no tenga señal
+- **Ver sus reportes anteriores** con el estado actual (enviado, en revisión, resuelto...)
+- **Ver alertas de su zona**: criaderos reportados cerca de donde vive el usuario
+- **Ver los 3 centros de salud más cercanos** sin necesidad de internet
+- **Editar su perfil**: nombre, teléfono, ubicación
 - **Cambiar su contraseña**
-- **Recibir notificaciones push** cuando un inspector cambia el estado de su reporte
+- **Recibir notificaciones push** cuando un inspector actualiza el estado de su reporte
 
 ---
 
@@ -35,323 +43,400 @@ Aplicación React Native (Expo SDK 54) para ciudadanos. Disponible para Android 
 
 ```
 mobile/
-├── app.json           # Configuración de Expo (nombre, íconos, plugins)
-├── eas.json           # Perfiles de build para EAS (development/preview/production)
-├── assets/
-│   └── sivapre-logo.png   # Ícono y splash de la app
+├── app.json          # Configuración Expo: nombre, ícono, splash, plugins, permisos
+├── eas.json          # Perfiles de build (development / preview / production)
+├── package.json
+├── .env              # EXPO_PUBLIC_API_URL para desarrollo local
 └── src/
     ├── components/
-    │   ├── SivapreLogo.tsx    # Logo SVG vectorial (nítido en cualquier pantalla)
-    │   └── UbigeoSelector.tsx # Selector de ubicación con búsqueda en tiempo real
+    │   ├── SivapreLogo.tsx     # Logo SVG vectorial (nítido en cualquier resolución)
+    │   └── UbigeoSelector.tsx  # Selector de departamento/provincia/distrito con búsqueda
+    ├── data/
+    │   └── hospitales.json     # 617 establecimientos de salud del Perú (embebido en APK)
     ├── hooks/
-    │   ├── useAuth.ts         # Login, registro, perfil, logout
-    │   └── useReportes.ts     # CRUD de reportes con React Query
+    │   ├── useAuth.ts          # Login, registro, perfil, logout (React Query mutations)
+    │   └── useReportes.ts      # CRUD de reportes (React Query queries + mutations)
     ├── navigation/
-    │   └── index.tsx          # Toda la navegación del app (stacks + tab navigator)
+    │   └── index.tsx           # Definición de toda la navegación
     ├── screens/
-    │   ├── SplashScreen.tsx       # Pantalla de carga animada
-    │   ├── WelcomeScreen.tsx      # Bienvenida (antes de login)
-    │   ├── LoginScreen.tsx        # Inicio de sesión
-    │   ├── RegisterScreen.tsx     # Registro de nueva cuenta
-    │   ├── HomeScreen.tsx         # Inicio: KPIs + alertas de zona
-    │   ├── ReportScreen.tsx       # Formulario para nuevo reporte
-    │   ├── MyReportsScreen.tsx    # Historial de reportes propios
-    │   ├── ReporteDetalleScreen.tsx # Detalle de un reporte
-    │   ├── InfoScreen.tsx         # Centro de información sobre dengue
-    │   ├── PerfilScreen.tsx       # Ver perfil + centros de salud cercanos
-    │   ├── EditarPerfilScreen.tsx # Editar nombre, teléfono, ubicación
-    │   └── CambiarPasswordScreen.tsx # Cambiar contraseña
+    │   ├── SplashScreen.tsx
+    │   ├── WelcomeScreen.tsx
+    │   ├── LoginScreen.tsx
+    │   ├── RegisterScreen.tsx
+    │   ├── HomeScreen.tsx
+    │   ├── ReportScreen.tsx           # Formulario offline-first
+    │   ├── MyReportsScreen.tsx
+    │   ├── ReporteDetalleScreen.tsx
+    │   ├── InfoScreen.tsx
+    │   ├── PerfilScreen.tsx
+    │   ├── EditarPerfilScreen.tsx
+    │   └── CambiarPasswordScreen.tsx
     ├── services/
-    │   ├── api.ts             # Cliente axios con interceptores (token + 401)
-    │   ├── auth.ts            # Funciones de autenticación
-    │   ├── reportes.ts        # Funciones de reportes
-    │   └── notifications.ts  # Registro de push token con Expo
+    │   ├── api.ts              # Cliente axios con interceptores (token + refresh)
+    │   ├── auth.ts             # Funciones de autenticación
+    │   ├── reportes.ts         # Funciones de reportes (con crearRaw para sync engine)
+    │   ├── db.ts               # Cola SQLite offline (insertPendingReport, etc.)
+    │   ├── sync.ts             # Motor de sincronización offline→servidor
+    │   └── notifications.ts   # Registro de push token
     ├── store/
-    │   ├── auth-context.tsx   # Contexto global: isAuthenticated, usuario
-    │   ├── auth-signal.ts     # Señal para cerrar sesión desde el interceptor axios
-    │   └── storage.ts         # Wrapper de AsyncStorage con claves tipadas
+    │   ├── auth-context.tsx    # Contexto global: isAuthenticated, usuario
+    │   ├── auth-signal.ts      # Señal para cerrar sesión desde el interceptor axios
+    │   └── storage.ts          # Wrapper tipado sobre SecureStore y AsyncStorage
     ├── theme/
-    │   └── index.ts           # Colores, tipografía, sombras (light/dark mode)
+    │   └── index.ts            # Colores, modo claro/oscuro
     └── types/
-        └── index.ts           # Tipos TypeScript de toda la app
+        └── index.ts            # Tipos TypeScript de toda la app
 ```
 
 ---
 
-## 3. Pantallas
+## 3. Navegación y pantallas
 
-### SplashScreen
-- Logo SVG animado con barra de progreso
-- Se muestra mientras se verifica si el usuario tiene sesión activa
-- Dura 1.8 segundos y luego navega a `Welcome` o `Main` según el estado de auth
-
-### WelcomeScreen
-- Primera pantalla que ve el usuario nuevo
-- Botones para ir a Login o Register
-
-### LoginScreen
-- Campos de email y contraseña
-- Muestra un banner verde de éxito si viene del registro
-- Maneja errores de credenciales incorrectas o cuenta inactiva
-
-### RegisterScreen
-- Nombre, email, contraseña
-- Selectores de departamento, provincia y distrito con búsqueda en tiempo real (`UbigeoSelector`)
-- Al registrarse, redirige a Login con mensaje de éxito (no hace auto-login)
-
-### HomeScreen
-- Saludo con primer nombre del usuario y avatar con inicial
-- Botón prominente "Reportar un criadero ahora"
-- **KPIs personales**: reportes enviados, en revisión, resueltos
-- **Alertas en tu zona**: conectadas al backend, muestran las zonas con más reportes recientes. Si el usuario no tiene ubicación configurada, muestra un CTA para ir al perfil.
-
-### ReportScreen
-- **Paso 1 — Foto**: Cámara o galería (sube a Cloudinary, muestra preview)
-- **Paso 2 — Ubicación**: GPS automático con fallback manual
-- **Paso 3 — Detalles**: tipo de lugar, tipo de objeto, presencia de larvas, dengue cercano, comentarios
-- Validación en cada paso antes de avanzar
-
-### MyReportsScreen
-- Lista paginada de los reportes del usuario
-- Badge de estado coloreado para cada reporte
-- Tap en un reporte → navega a `ReporteDetalle`
-
-### ReporteDetalleScreen
-- Foto del criadero (si existe)
-- Todos los datos del reporte
-- Estado con color e ícono
-- Botón para cancelar (solo si está en estado `enviado`)
-
-### InfoScreen
-- Información educativa sobre dengue y el zancudo Aedes aegypti
-- Sección de mitos y verdades
-- Contactos de emergencia
-
-### PerfilScreen
-- Datos del usuario (nombre, email, teléfono, ubicación)
-- **GPS rápido**: usa la última posición conocida primero (instantáneo), luego actualiza con posición fresca si es necesario
-- **3 centros de salud más cercanos**: calculados con la fórmula Haversine, muestra la distancia en km/m
-- Acceso a editar perfil y cambiar contraseña
-
-### EditarPerfilScreen
-- Campos pre-llenados con la información actual
-- Email es solo lectura (no se puede cambiar)
-- `UbigeoSelector` para departamento, provincia y distrito
-- Solo muestra el botón guardar si hay cambios reales (detecta diferencias)
-
-### CambiarPasswordScreen
-- Contraseña actual, nueva contraseña y confirmación
-- Validación en tiempo real: avisa si no coinciden o son muy cortas
-- Ícono de ojo para mostrar/ocultar cada campo
-
----
-
-## 4. Navegación
-
-La app usa tres stacks anidados:
+### Estructura de navegación
 
 ```
 RootNavigator
-├── Splash (solo se muestra antes de verificar la sesión)
-├── Auth (cuando no hay sesión)
-│   ├── Welcome
-│   ├── Login
-│   └── Register
-└── Main (cuando hay sesión)
-    ├── Tabs (tab bar inferior)
-    │   ├── Home
-    │   ├── Report
-    │   ├── MyReports
-    │   └── Info
-    ├── ReporteDetalle (slide desde la derecha)
+│
+├── SplashScreen
+│     Verifica si hay sesión guardada en SecureStore.
+│     Dura 1.8 segundos con animación del logo.
+│
+├── Auth Stack  (sin sesión activa)
+│   ├── WelcomeScreen   → primera pantalla para usuarios nuevos
+│   ├── LoginScreen     → email + contraseña
+│   └── RegisterScreen  → nombre, email, contraseña, ubigeo
+│
+└── Main Stack  (con sesión activa)
+    ├── Tabs (barra inferior)
+    │   ├── Inicio       (HomeScreen)
+    │   ├── Reportar     (ReportScreen)
+    │   ├── Mis reportes (MyReportsScreen)
+    │   └── Información  (InfoScreen)
+    │
+    ├── ReporteDetalle    → detalle de un reporte (slide desde la derecha)
     ├── Perfil
     ├── EditarPerfil
     └── CambiarPassword
 ```
 
-La lógica de decisión (qué stack mostrar) está en `RootNavigator` y depende del estado `isAuthenticated` y `splashShown` del `AuthContext`.
+### Descripción de cada pantalla
+
+**SplashScreen**
+Logo SVG animado con barra de progreso. Mientras se muestra, verifica en SecureStore si hay sesión activa. Navega automáticamente a Auth o Main.
+
+**WelcomeScreen**
+Pantalla de bienvenida para usuarios nuevos. Tiene botones para ir a Login o Register.
+
+**LoginScreen**
+Campos de email y contraseña. Muestra un banner verde de éxito si viene del registro. Maneja errores de credenciales incorrectas o cuenta desactivada.
+
+**RegisterScreen**
+Nombre, apellido, email, contraseña. Selector `UbigeoSelector` para departamento/provincia/distrito con búsqueda en tiempo real. Al registrarse redirige a Login (no hace auto-login).
+
+**HomeScreen**
+- Saludo personalizado con el primer nombre y avatar con la inicial.
+- Botón prominente "Reportar un criadero ahora".
+- KPIs personales: cuántos reportes tiene enviados, en revisión, resueltos.
+- Alertas de zona: criaderos reportados cerca de donde vive el usuario. Si no tiene ubicación configurada, muestra un link para ir al perfil.
+
+**ReportScreen** ← el más importante
+Formulario offline-first para reportar un criadero. Campos:
+
+| Campo | Obligatorio | Notas |
+|---|---|---|
+| Foto | ✅ | Cámara. Copia el archivo a un directorio persistente de la app |
+| Ubicación GPS | ✅ | Funciona offline (satélite). Incluye dirección postal por geocodificación inversa |
+| Tipo de lugar | ✅ | Chips: Vivienda / Vía Pública / Terreno Abandonado / Mercado / Colegio / Otro |
+| Tipo de objeto | ✅ | Chips: Llantas / Baldes / Plantas / Botellas / Canales / Otro |
+| ¿Observas larvas? | ✅ | Chips: Sí, claramente / No estoy seguro / No |
+| ¿Casos de dengue cerca? | ✅ | Chips: Sí / No lo sé / No |
+| Comentarios | No | Texto libre |
+
+El botón "Enviar" solo se activa cuando todos los campos obligatorios están completos.
+
+**MyReportsScreen**
+Lista paginada de los reportes del usuario con badge de estado coloreado. Filtros por estado (Todos / Enviado / En revisión / Resuelto / Rechazado). Si no hay reportes, muestra "Crear primer reporte" que navega directamente al tab de reporte.
+
+**ReporteDetalleScreen**
+Foto del criadero, todos los campos, estado con color e ícono. Botón para cancelar el reporte si está en estado `enviado`.
+
+**InfoScreen**
+Información educativa sobre el dengue y el zancudo Aedes aegypti, mitos y verdades, contactos de emergencia.
+
+**PerfilScreen**
+Datos del usuario. Sección de los 3 centros de salud más cercanos (funciona offline). Acceso a editar perfil y cambiar contraseña.
+
+**EditarPerfilScreen**
+Campos pre-llenados con la información actual. Email no se puede cambiar. El botón Guardar solo aparece si hay cambios reales.
+
+**CambiarPasswordScreen**
+Contraseña actual, nueva y confirmación. Validación en tiempo real. Ícono de ojo para mostrar/ocultar cada campo.
 
 ---
 
-## 5. Manejo del estado
+## 4. Arquitectura offline-first
 
-### AuthContext (`src/store/auth-context.tsx`)
-Estado global de autenticación. Persiste en `AsyncStorage` para que la sesión sobreviva a cerrar la app.
+La app **siempre** guarda el reporte localmente primero. La red solo se usa para sincronizar. Un reporte no puede perderse por falta de conexión.
+
+### Cola SQLite local (`sivapre.db`)
+
+Cuando el usuario presiona "Enviar reporte":
+
+```
+1. insertPendingReport()
+   → reporte guardado en SQLite local
+   → SIEMPRE succeeds (no depende de la red)
+   ↓
+2. syncPendingReports() — fire-and-forget (no bloquea la UI)
+
+   CON SEÑAL:
+   ├── Sube la foto al servidor (si hay foto_local_uri y no hay foto_url aún)
+   ├── POST /reportes al backend
+   ├── markAsSent() → estado = 'enviado'
+   └── Borra el archivo de foto local (libera espacio)
+
+   SIN SEÑAL O ERROR:
+   ├── markAsFailed() → estado = 'fallido', retry_count++
+   └── 3 mecanismos de reintento automático:
+       1. NetInfo listener → sync cuando vuelve la conexión
+       2. AppState listener → sync cuando la app regresa a primer plano
+       3. BackgroundFetch → cada ~15 min (iOS/Android lo throttlean,
+          no es confiable como mecanismo principal)
+```
+
+### Estados de un reporte en SQLite
+
+| Estado | Significado |
+|---|---|
+| `pendiente` | Guardado localmente, no enviado aún |
+| `enviando` | Sync en progreso |
+| `enviado` | Confirmado por el servidor |
+| `fallido` | Error al enviar — se reintenta automáticamente |
+
+**Límite de reintentos**: 10. Un reporte con 10 fallos deja de procesarse (un error 422 de validación no se va a resolver solo reintentando). Queda en SQLite y se limpia a los 7 días.
+
+**Recuperación de crash**: si la app se cierra con un reporte en `enviando`, al reiniciar `initDb()` lo resetea a `pendiente` para que no quede abandonado.
+
+**Flag de concurrencia**: la variable `isSyncing` evita que dos sync corran al mismo tiempo (por ejemplo si NetInfo y AppState se disparan simultáneamente).
+
+### Idempotencia con el servidor
+
+Cada reporte lleva:
+- `device_id`: UUID único del dispositivo (se genera una vez y se persiste)
+- `local_id`: UUID generado al crear el formulario
+
+Si el sync envía el mismo reporte dos veces (reintento), el servidor devuelve HTTP 409 y la app lo marca como `enviado`. No se crean duplicados.
+
+### Nota técnica — null en expo-sqlite v15 (Android)
+
+`runSync` y `runAsync` usan el mismo código nativo Kotlin internamente. Cuando se pasa `null` como valor en el objeto de params, el bridge JS→Kotlin lo serializa como un objeto vacío `{}` en vez de `null` primitivo, causando:
+
+```
+[runSync] Cannot convert '[object Object]' to a Kotlin type
+```
+
+**Solución**: los campos opcionales (`comentarios`, `direccion`, etc.) se omiten del objeto de params cuando son `null`. SQLite trata automáticamente los parámetros nombrados no enlazados como `NULL` nativo.
 
 ```typescript
-// Disponible en toda la app con:
+// ✗ Causa crash en Android:
+{ $comentarios: null }
+
+// ✓ Correcto — SQLite infiere NULL para $comentarios:
+{ $local_id: "...", $tipo_lugar: "Vivienda" }  // $comentarios ausente del objeto
+```
+
+Este problema solo ocurre en el APK standalone. En Expo Go, el bridge es diferente y no lo reproduce.
+
+---
+
+## 5. Gestión del estado
+
+### AuthContext (`store/auth-context.tsx`)
+
+Estado global de autenticación. Persiste en AsyncStorage para sobrevivir a cerrar la app.
+
+```typescript
 const { isAuthenticated, usuario, setUsuario, setIsAuthenticated } = useAuthContext();
 ```
 
 Campos:
 - `isAuthenticated`: boolean — si hay sesión activa
-- `splashShown`: boolean — si ya pasó la pantalla de splash
-- `usuario`: objeto con los datos del usuario logueado
-- `setUsuario()`: actualiza el usuario (ej. después de editar perfil)
+- `splashShown`: boolean — si ya pasó el splash
+- `usuario`: datos del usuario logueado (nombre, email, rol, ubigeo...)
 
 ### React Query (`@tanstack/react-query`)
-Para los datos del servidor (reportes, alertas de zona). Maneja automáticamente:
+
+Para los datos del servidor (reportes, alertas de zona). Gestiona automáticamente:
 - Estado de carga (`isLoading`)
-- Estado de error (`isError`)
-- Caché (no vuelve a pedir si los datos son recientes)
+- Errores (`isError`)
+- Caché (no repite peticiones si los datos son recientes)
 - Invalidación (actualiza la lista después de crear o cancelar un reporte)
 
-### AsyncStorage + `storage.ts`
-Para persistir datos entre sesiones (token JWT, datos del usuario). Las claves están tipadas en `StorageKeys`:
+### SecureStore y AsyncStorage (`store/storage.ts`)
 
-```typescript
-export const StorageKeys = {
-  AUTH_TOKEN: 'sivapre_auth_token',
-  REFRESH_TOKEN: 'sivapre_refresh_token',
-  USER_DATA: 'sivapre_user_data',
-};
-```
+| Dato | Dónde se guarda | Por qué |
+|---|---|---|
+| `AUTH_TOKEN` | SecureStore | Token JWT — cifrado por el SO |
+| `REFRESH_TOKEN` | SecureStore | Token JWT — cifrado por el SO |
+| `USER_DATA` | AsyncStorage | Datos del perfil — no es secreto |
+| `DEVICE_ID` | AsyncStorage | UUID del dispositivo para idempotencia |
 
----
-
-## 6. Llamadas al backend (servicios)
-
-### `src/services/api.ts`
-Crea el cliente Axios con:
-- `baseURL` desde la variable de entorno `EXPO_PUBLIC_API_URL`
-- Interceptor de request: agrega el token JWT en cada petición
-- Interceptor de response: si el servidor devuelve 401, cierra la sesión automáticamente
-
-```typescript
-export const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://10.211.180.205:8000/api/v1';
-```
-
-### `src/services/auth.ts`
-- `login(email, password)` → guarda token y datos del usuario en AsyncStorage
-- `register(...)` → solo registra, no hace login automático
-- `logout()` → llama al backend y limpia AsyncStorage
-- `updatePerfil(...)` → actualiza perfil y refresca AsyncStorage
-- `changePassword(...)` → cambia contraseña
-
-### `src/services/reportes.ts`
-- `listarMisReportes(pagina)` → reportes del usuario con paginación
-- `obtenerPorId(id)` → detalle de un reporte
-- `crear(payload)` → nuevo reporte
-- `cancelar(id)` → cancelar un reporte propio
-- `obtenerAlertasZona()` → alertas de la zona del usuario
-
-### `src/hooks/useAuth.ts`
-Expone los servicios de auth con `useMutation` de React Query:
-
-```typescript
-const { login, register, logout, updatePerfil, changePassword, isLoggingIn, loginError } = useAuth();
-```
-
-### `src/hooks/useReportes.ts`
-Expone las queries y mutaciones de reportes:
-
-```typescript
-const { data, isLoading } = useMisReportes();
-const { mutate: crearReporte } = useCrearReporte();
-const { data: alertas } = useAlertasZona();
-```
+**SecureStore vs AsyncStorage**: AsyncStorage en Android es texto plano en `/data/data/[app]/` — legible en dispositivos rooteados. SecureStore usa Android Keystore y requiere acceso al keystore del sistema operativo.
 
 ---
 
-## 7. Notificaciones push
+## 6. Comunicación con el backend
 
-### Cómo se activan
-Al hacer login, la app automáticamente:
-1. Pide permiso de notificaciones al sistema operativo (un popup del sistema, no se puede personalizar)
-2. Crea el canal de Android "reportes" con prioridad alta y color verde SIVAPRE
-3. Obtiene el Expo Push Token del dispositivo
-4. Lo envía al backend: `POST /api/v1/auth/push-token`
+### Cliente axios (`services/api.ts`)
 
-El código está en `src/services/notifications.ts`.
+```typescript
+const api = axios.create({
+  baseURL: process.env.EXPO_PUBLIC_API_URL,  // inyectado en build por EAS
+  timeout: 15_000,
+});
+```
 
-### Mensajes que recibe el usuario
-| Evento | Notificación |
-|---|---|
-| Inspector marca "En revisión" | "🔍 Reporte en revisión" |
-| Inspector marca "Resuelto" | "✅ Reporte resuelto — ¡Gracias!" |
-| Inspector marca "Rechazado" | "ℹ️ Reporte no procesado" |
+**Interceptor de request**: agrega el token JWT en cada petición autenticada.
 
-### Limitación importante
-Las notificaciones push **solo funcionan en dispositivos físicos**. No funcionan en el emulador de Android ni en el simulador de iOS.
+**Interceptor de response — refresh silencioso**:
+Cuando el servidor devuelve 401 (access token expirado):
+1. Toma el refresh token de SecureStore
+2. Llama a `POST /auth/refresh`
+3. Guarda el nuevo par de tokens
+4. Reintenta la petición original con el nuevo token
+
+Si el refresh también falla (sesión expirada), dispara `triggerUnauthorized()` que cierra la sesión automáticamente.
+
+El flag `isRefreshing` y la cola `pendingQueue` evitan que múltiples peticiones simultáneas que fallan con 401 generen múltiples llamadas a `/refresh`. Solo una llama a refresh; las demás esperan en cola y se reintentan cuando llega el nuevo token.
+
+### `services/reportes.ts` — `crearRaw()`
+
+El método `crearRaw()` es usado exclusivamente por el sync engine. A diferencia de `crear()` que lanza excepciones genéricas, `crearRaw()` devuelve el status HTTP y el body de la respuesta para que el sync engine pueda registrarlos en SQLite con fines de debugging.
 
 ---
 
-## 8. Temas y estilos
+## 7. Hospitales offline
 
-### Colores principales
+`PerfilScreen` muestra los 3 centros de salud más cercanos al usuario usando el GPS del dispositivo.
+
+- **617 establecimientos** de todo el Perú embebidos en `src/data/hospitales.json` dentro del APK.
+- Cálculo con la fórmula **Haversine** (distancia en la superficie de una esfera) sobre las coordenadas del usuario y cada hospital.
+- Muestra nombre, tipo de establecimiento y distancia en metros o kilómetros.
+- **100% offline** — no hace ninguna petición a internet.
+
+El dataset viene del sistema RENAES del MINSA.
+
+---
+
+## 8. Notificaciones push
+
+### Configuración al hacer login
+
+Al iniciar sesión, `notifications.ts` ejecuta automáticamente:
+1. Solicita permiso de notificaciones al sistema operativo.
+2. Crea el canal de Android `"reportes"` (prioridad alta, color verde SIVAPRE).
+3. Obtiene el Expo Push Token del dispositivo.
+4. Lo envía a `POST /api/v1/auth/push-token`.
+
+### Estado actual — Firebase pendiente
+
+Las notificaciones push en APK standalone de Android requieren **Firebase Cloud Messaging (FCM)**. Actualmente no está configurado.
+
+Para activarlas:
+1. Crear un proyecto en [Firebase Console](https://console.firebase.google.com)
+2. Agregar una app Android con el package name de la app
+3. Descargar `google-services.json` y colocarlo en `mobile/`
+4. Agregar `"@config-plugins/expo-firebase-core"` en `app.json` → `plugins`
+5. Hacer un nuevo build con EAS
+
+Las notificaciones **sí funcionan** en Expo Go (usa el servidor FCM propio de Expo). Solo fallan en el APK standalone.
+
+---
+
+## 9. Temas y estilos
+
+### Colores
 
 | Variable | Color | Uso |
 |---|---|---|
-| `primary` | `#0F6E56` | Verde SIVAPRE — botones, highlights, avatares |
+| `primary` | `#0F6E56` | Verde SIVAPRE — botones, tabs activos, avatares |
 | `background` | `#F5FAF8` | Fondo de pantallas |
 | `surface` | `#FFFFFF` | Fondo de cards |
 | `text` | `#1A2E25` | Texto principal |
 | `textSecondary` | `#6B8C7A` | Texto secundario |
+| `textDisabled` | `#9DB8AA` | Placeholders, texto inactivo |
+| `border` | `#D4E6DC` | Bordes de inputs y cards |
 | `error` | `#EF4444` | Errores, alertas altas |
-| `warning` | `#F59E0B` | Alertas medias |
-| `success` | `#10B981` | Alertas bajas, éxito |
+
+Soporte de modo oscuro integrado — los colores cambian automáticamente según la preferencia del sistema.
 
 ### Fuentes
-- **Montserrat ExtraBold**: títulos, números grandes, labels activos del tab
-- **Inter Regular**: cuerpo de texto, descripciones, labels inactivos
 
-Las fuentes se cargan con `expo-font` al inicio de la app.
+- **Montserrat ExtraBold**: títulos, números grandes, labels activos del tab bar, botones
+- **Inter Regular**: cuerpo de texto, descripciones, placeholders
+
+Cargadas con `expo-font` al inicio de la app.
 
 ---
 
-## 9. Variables de entorno
+## 10. Variables de entorno
 
-Las variables `EXPO_PUBLIC_*` se hornean en el bundle al momento del build. No son secretas — son visibles en el código compilado.
+```
+EXPO_PUBLIC_API_URL=http://161.132.53.226/api/v1
+```
 
 Se configuran en `eas.json` por perfil de build:
 
-```json
-{
-  "build": {
-    "development": {
-      "env": { "EXPO_PUBLIC_API_URL": "http://192.168.1.100:8000/api/v1" }
-    },
-    "preview": {
-      "env": { "EXPO_PUBLIC_API_URL": "https://tu-tunnel.ngrok-free.dev/api/v1" }
-    },
-    "production": {
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.sivapre.gob.pe/api/v1" }
-    }
-  }
-}
-```
+| Perfil | `EXPO_PUBLIC_API_URL` | Tipo de build |
+|---|---|---|
+| `development` | `http://10.211.180.205:8000/api/v1` | APK debug con dev client |
+| `preview` | `http://161.132.53.226/api/v1` | APK de prueba (distribución interna) |
+| `production` | `https://api.sivapre.gob/api/v1` | AAB para Google Play Store |
+
+Las variables `EXPO_PUBLIC_*` se hornearon en el bundle JavaScript en el momento del build — son visibles en el código compilado. No usar para secretos.
 
 ---
 
-## 10. Cómo construir el APK
+## 11. Construir el APK con EAS
 
 ### Requisitos
-- Cuenta en [expo.dev](https://expo.dev) (gratis)
-- EAS CLI instalado: `npm install -g eas-cli`
+
+- Cuenta en [expo.dev](https://expo.dev)
+- EAS CLI: `npm install -g eas-cli`
 - Login: `eas login`
 
-### APK de prueba (preview)
+### APK de prueba (preview) — el que se usa actualmente
 
 ```bash
 cd mobile
 
-# 1. Actualizar la URL del backend en eas.json (perfil "preview")
-# 2. Construir
+# Construir y subir a EAS
 eas build --platform android --profile preview
 
-# Al finalizar, EAS muestra un enlace QR para instalar directamente
+# Al terminar, EAS muestra un enlace de descarga del .apk
+# También se puede ver en: expo.dev/accounts/emmy_lopez/projects/sivapre/builds
 ```
 
-### APK de producción (Play Store)
+### APK de producción (para Play Store)
 
 ```bash
 eas build --platform android --profile production
-# Genera un .aab (Android App Bundle) para subir a Google Play
+# Genera un .aab (Android App Bundle)
 ```
 
 ### Cuándo reconstruir
-- Cuando cambias la URL del backend (`EXPO_PUBLIC_API_URL`)
-- Cuando instalas un nuevo paquete nativo (ej. `expo-notifications`, `expo-camera`)
-- Cuando cambias algo en `app.json` (íconos, permisos, plugins)
-- Para cambios solo en código TypeScript, no necesitas reconstruir si usas Expo Updates (OTA)
+
+| Cambio | ¿Rebuild necesario? |
+|---|---|
+| Cambio en código TypeScript | No (si se usa Expo OTA Updates) |
+| Cambio en `EXPO_PUBLIC_API_URL` | **Sí** |
+| Nuevo paquete nativo | **Sí** |
+| Cambio en `app.json` (íconos, permisos, plugins) | **Sí** |
+
+### Actualización OTA (sin rebuild)
+
+Para cambios solo en código TypeScript, se puede publicar una actualización que los usuarios reciben la próxima vez que abren la app:
+
+```bash
+eas update --branch preview --message "descripción del cambio"
+```
