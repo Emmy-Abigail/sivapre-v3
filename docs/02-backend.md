@@ -174,9 +174,11 @@ Cada fila es un criadero reportado por un ciudadano.
 
 ### `casos_noti` y `casos_netlab`
 
-Datos epidemiológicos externos (sistemas del MINSA):
-- **NOTI**: casos sospechosos a nivel provincia. Sin coordenadas GPS exactas — el dashboard los posiciona en el centroide del departamento.
-- **NETLAB**: casos confirmados por PCR. Incluyen serotipo de dengue.
+Tablas preparadas para datos epidemiológicos externos del MINSA:
+- **NOTI**: casos sospechosos a nivel provincia.
+- **NETLAB**: casos confirmados por PCR con serotipo de dengue.
+
+> **Integración pendiente**: las tablas existen y el dashboard tiene endpoints y componentes para mostrarlas, pero la conexión con los sistemas NOTI/NETLAB del MINSA no está implementada. Los datos tendrían que cargarse manualmente hasta que se desarrolle esa integración. Cuando tengan datos, el dashboard los posiciona en el mapa usando coordenadas aproximadas del centroide de cada departamento (NOTI y NETLAB solo incluyen código UBIGEO, no GPS exacto).
 
 ### `audit_log`
 

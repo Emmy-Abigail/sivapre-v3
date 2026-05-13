@@ -4,6 +4,8 @@
 
 Plataforma epidemiológica para reportar y gestionar criaderos de mosquitos (*Aedes aegypti*) en el Perú. Los ciudadanos reportan criaderos con foto y GPS desde la app Android. Los inspectores de salud los gestionan desde un dashboard web.
 
+> **Estado actual del piloto**: el sistema opera únicamente con reportes ciudadanos de la app móvil. Las tablas de datos NOTI (casos sospechosos) y NETLAB (confirmados por laboratorio) existen en la base de datos pero la integración con esos sistemas externos del MINSA no está implementada — los datos tendrían que cargarse manualmente.
+
 ---
 
 ## Componentes

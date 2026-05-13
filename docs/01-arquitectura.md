@@ -15,6 +15,12 @@ Sistema de Vigilancia y Prevención de Enfermedades. Permite a ciudadanos report
 
 ---
 
+## Estado actual del piloto
+
+El sistema opera **únicamente con reportes ciudadanos** de la app móvil. Las tablas `casos_noti` y `casos_netlab` existen en la base de datos y el dashboard tiene los componentes para mostrarlas, pero **la integración con los sistemas externos del MINSA no está implementada**. Los datos de NOTI y NETLAB tendrían que cargarse manualmente hasta que se desarrolle esa integración.
+
+---
+
 ## Actores del sistema
 
 | Actor | Herramienta | Qué hace |
