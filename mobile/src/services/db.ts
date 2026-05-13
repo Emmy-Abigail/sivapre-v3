@@ -100,6 +100,25 @@ export async function insertPendingReport(report: {
   comentarios: string | null;
 }): Promise<void> {
   const now = new Date().toISOString();
+  // Pasar null por el bridge JS→Kotlin de expo-sqlite causa
+  // "Cannot convert '[object Object]' to a Kotlin type".
+  // Solución: omitir las claves con null — SQLite las trata como NULL nativo.
+  const params: Record<string, string | number> = {
+    $local_id:       report.local_id,
+    $device_id:      report.device_id,
+    $latitud:        report.latitud,
+    $longitud:       report.longitud,
+    $tipo_lugar:     report.tipo_lugar,
+    $tipo_objeto:    report.tipo_objeto,
+    $observa_larvas: report.observa_larvas,
+    $created_at:     now,
+    $updated_at:     now,
+  };
+  if (report.direccion != null)                   params.$direccion      = report.direccion;
+  if (report.foto_local_uri != null)              params.$foto_local_uri = report.foto_local_uri;
+  if (report.conocimiento_dengue_cercano != null) params.$conocimiento   = report.conocimiento_dengue_cercano;
+  if (report.comentarios != null)                 params.$comentarios    = report.comentarios;
+
   await getDb().runAsync(
     `INSERT OR IGNORE INTO pending_reports
        (local_id, device_id, latitud, longitud, direccion, foto_local_uri, foto_url,
@@ -108,21 +127,7 @@ export async function insertPendingReport(report: {
      VALUES ($local_id, $device_id, $latitud, $longitud, $direccion, $foto_local_uri,
              NULL, $tipo_lugar, $tipo_objeto, $observa_larvas, $conocimiento,
              $comentarios, 'pendiente', $created_at, $updated_at)`,
-    {
-      $local_id:       report.local_id,
-      $device_id:      report.device_id,
-      $latitud:        report.latitud,
-      $longitud:       report.longitud,
-      $direccion:      report.direccion      ?? null,
-      $foto_local_uri: report.foto_local_uri ?? null,
-      $tipo_lugar:     report.tipo_lugar,
-      $tipo_objeto:    report.tipo_objeto,
-      $observa_larvas: report.observa_larvas,
-      $conocimiento:   report.conocimiento_dengue_cercano ?? null,
-      $comentarios:    report.comentarios    ?? null,
-      $created_at:     now,
-      $updated_at:     now,
-    },
+    params,
   );
 }
 
@@ -151,12 +156,17 @@ export async function markAsFailed(
   serverResponse: string | null,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const params: Record<string, string | number> = { $now: now, $id: id };
+  if (httpStatus != null)     params.$http_status      = httpStatus;
+  if (serverResponse != null) params.$server_response  = serverResponse;
+
   await getDb().runAsync(
     `UPDATE pending_reports
-     SET estado = 'fallido', updated_at = ?, last_sync_attempt = ?,
-         http_status = ?, server_response = ?, retry_count = retry_count + 1
-     WHERE id = ?`,
-    [now, now, httpStatus ?? null, serverResponse ?? null, id],
+     SET estado = 'fallido', updated_at = $now, last_sync_attempt = $now,
+         http_status = $http_status, server_response = $server_response,
+         retry_count = retry_count + 1
+     WHERE id = $id`,
+    params,
   );
 }
 
