@@ -245,7 +245,7 @@ export default function ReportScreen({ navigation }: Props) {
       Alert.alert('Ubicación requerida', 'Captura tu ubicación GPS antes de enviar.');
       return;
     }
-    if (!tipoLugar || !tipoObjeto || !observaLarvas) {
+    if (!tipoLugar || !tipoObjeto || !observaLarvas || !dengue) {
       Alert.alert('Campos incompletos', 'Completa todos los campos obligatorios.');
       return;
     }
@@ -299,7 +299,7 @@ export default function ReportScreen({ navigation }: Props) {
   };
 
   const ubicacionObtenida = latitud !== null && longitud !== null;
-  const formularioValido = fotoLocalUri && ubicacionObtenida && tipoLugar && tipoObjeto && observaLarvas;
+  const formularioValido = fotoLocalUri && ubicacionObtenida && tipoLugar && tipoObjeto && observaLarvas && dengue;
 
   const paddingBottom = keyboard.keyboardShown
     ? keyboard.keyboardHeight + 24
