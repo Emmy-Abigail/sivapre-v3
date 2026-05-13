@@ -76,7 +76,7 @@ export async function syncPendingReports(): Promise<void> {
           direccion: report.direccion ?? undefined,
         });
 
-        markAsSent(report.id, status, JSON.stringify(data));
+        markAsSent(report.id, status, JSON.stringify(data) ?? '{}');
 
         // Delete local photo file after successful sync (best effort).
         if (report.foto_local_uri) {
